@@ -1,0 +1,123 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.302
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install icon test dependency
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Core smoke tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.Core.SmokeTests/BlockFerry.Core.SmokeTests.csproj -c Release
+
+      - name: Discovery fixture tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.DiscoveryFixtureTests/BlockFerry.DiscoveryFixtureTests.csproj -c Release
+
+      - name: PCL2 fixture tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.Pcl2FixtureTests/BlockFerry.Pcl2FixtureTests.csproj -c Release
+
+      - name: Content adapter fixture tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.ContentFixtureTests/BlockFerry.ContentFixtureTests.csproj -c Release
+
+      - name: Transaction preflight tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj -c Release -r win-x64 -- preflight
+
+      - name: Transaction journal tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj -c Release -r win-x64 -- journal
+
+      - name: Transaction file-operation tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj -c Release -r win-x64 -- file-ops
+
+      - name: Transaction coordinator tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj -c Release -r win-x64 -- coordinator
+
+      - name: Transaction recovery tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj -c Release -r win-x64 -- recovery
+
+      - name: WinUI logic tests
+        shell: pwsh
+        run: dotnet run --project tests/BlockFerry.AppLogicTests/BlockFerry.AppLogicTests.csproj -c Release -r win-x64 -p:WindowsAppSdkBootstrapInitialize=false
+
+      - name: Build WinUI release
+        shell: pwsh
+        run: dotnet build src/BlockFerry.App.WinUI/BlockFerry.App.WinUI.csproj -c Release -p:Platform=x64 -r win-x64
+
+      - name: Check Core formatting
+        shell: pwsh
+        run: dotnet format src/BlockFerry.Core/BlockFerry.Core.csproj --verify-no-changes --no-restore
+
+      - name: Check WinUI formatting
+        shell: pwsh
+        run: dotnet format src/BlockFerry.App.WinUI/BlockFerry.App.WinUI.csproj --verify-no-changes --no-restore
+
+      - name: Check smoke-test formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.Core.SmokeTests/BlockFerry.Core.SmokeTests.csproj --verify-no-changes --no-restore
+
+      - name: Check discovery-test formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.DiscoveryFixtureTests/BlockFerry.DiscoveryFixtureTests.csproj --verify-no-changes --no-restore
+
+      - name: Check PCL2-test formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.Pcl2FixtureTests/BlockFerry.Pcl2FixtureTests.csproj --verify-no-changes --no-restore
+
+      - name: Check content-test formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.ContentFixtureTests/BlockFerry.ContentFixtureTests.csproj --verify-no-changes --no-restore
+
+      - name: Check transaction-test formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.TransactionFixtureTests/BlockFerry.TransactionFixtureTests.csproj --verify-no-changes --no-restore
+
+      - name: Check WinUI-logic formatting
+        shell: pwsh
+        run: dotnet format tests/BlockFerry.AppLogicTests/BlockFerry.AppLogicTests.csproj --verify-no-changes --no-restore
+
+      - name: App icon contract tests
+        shell: pwsh
+        run: python tests/BlockFerry.IconTests/IconContract.Tests.py
+
+      - name: Portable script contract tests
+        shell: pwsh
+        run: ./tests/BlockFerry.PortableTests/PortableContract.Tests.ps1 -RepositoryRoot .
+
+      - name: Portable verifier tests
+        shell: pwsh
+        run: ./tests/BlockFerry.PortableTests/PortableVerifier.Tests.ps1 -RepositoryRoot .

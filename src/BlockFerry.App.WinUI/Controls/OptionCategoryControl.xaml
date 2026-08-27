@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="BlockFerry.App.WinUI.Controls.OptionCategoryControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:BlockFerry.App.WinUI.Controls">
+    <Border
+        x:Name="CategorySurface"
+        Padding="0"
+        Background="{ThemeResource OptionCategorySurfaceBrush}"
+        BorderBrush="{ThemeResource OptionCardStrokeBrush}"
+        BorderThickness="1"
+        CornerRadius="16">
+        <Grid>
+            <Border
+                x:Name="SelectedSurface"
+                Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
+                BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="15"
+                IsHitTestVisible="False"
+                Opacity="0" />
+            <Border
+                x:Name="CategoryContent"
+                Padding="12">
+                <StackPanel Spacing="8">
+                <Grid
+                    MinHeight="56"
+                    ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <CheckBox
+                        x:Name="CategoryCheckBox"
+                        MinWidth="40"
+                        MinHeight="56"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalAlignment="Center"
+                        Click="CategoryCheckBox_Click"
+                        IsThreeState="True"
+                        UseSystemFocusVisuals="True">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="CategoryIconTile"
+                                Width="32"
+                                Height="32"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Background="{ThemeResource OptionCardIconSurfaceBrush}"
+                                CornerRadius="8"
+                                IsHitTestVisible="False">
+                                <SymbolIcon
+                                    x:Name="CategoryIcon"
+                                    Width="20"
+                                    Height="20"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Foreground="{ThemeResource OptionCardIconForegroundBrush}"
+                                    IsHitTestVisible="False" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                                <TextBlock
+                                    x:Name="CategoryTitleText"
+                                    FontSize="15"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource DrawerTextBrush}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="CategorySummaryText"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </CheckBox>
+                    <controls:ExpandCollapseButton
+                        x:Name="DisclosureButton"
+                        Grid.Column="1"
+                        Width="40"
+                        Height="40"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        FontFamily="Segoe MDL2 Assets"
+                        FontSize="14"
+                        IsExpanded="False"
+                        UseSystemFocusVisuals="True" />
+                </Grid>
+                <Border
+                    x:Name="ChildrenRegion"
+                    MaxHeight="0"
+                    Opacity="0"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        x:Name="ChildrenPanel"
+                        Spacing="4" />
+                </Border>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

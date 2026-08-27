@@ -1,0 +1,67 @@
+namespace BlockFerry.Core.Pcl2;
+
+public enum Pcl2DiagnosticSeverity
+{
+    Info,
+    Warning,
+    Error,
+}
+
+public enum Pcl2DiagnosticCode
+{
+    Pcl2NotFound,
+    DiscoveryLimitReached,
+    CandidateEnumerationFailed,
+    CandidatePathInvalid,
+    MinecraftRootInvalid,
+    ReparsePointRejected,
+    PathOutsideMinecraftRoot,
+    MultipleMinecraftRoots,
+    VersionsDirectoryUnreadable,
+    NoVersionInstances,
+    PclIniReadFailed,
+    InstanceJsonMissing,
+    InstanceJsonFallback,
+    InstanceJsonAmbiguous,
+    MultipleInstanceJsonFiles,
+    InstanceJsonInvalid,
+    InstanceJsonSchemaInvalid,
+    ManifestInvalid,
+    InheritanceParentMissing,
+    InheritanceCycle,
+    InheritancePathInvalid,
+    InheritanceDepthExceeded,
+    SetupMissing,
+    SetupReadFailed,
+    IsolationSettingMissing,
+    IsolationSettingUnknown,
+    IsolationSettingConflict,
+    IsolationInferredFromContent,
+    IsolationEvidenceUnreadable,
+    NonIsolatedInstance,
+    MinecraftVersionUnknown,
+    ModLoaderUnknown,
+    InstanceMetadataUnusable,
+    InstanceContractMismatch,
+    GameRootUnresolved,
+    SameSourceAndTarget,
+    GameRootInvalid,
+    SourceOptionsMissing,
+    TargetOptionsMissing,
+    OptionsReadFailed,
+    OptionsSchemaUnsupported,
+    OptionsSnapshotChanged,
+    DiscoverySessionInactive,
+    DiscoveryGenerationMismatch,
+    DiscoveryProofInvalid,
+    DiscoveryInstanceUnavailable,
+    DiscoveryRootStale,
+    UnsupportedGameRootVolume,
+}
+
+public sealed record Pcl2Diagnostic(
+    Pcl2DiagnosticCode Code,
+    Pcl2DiagnosticSeverity Severity,
+    string Message,
+    string? Path = null,
+    string? InstanceId = null);

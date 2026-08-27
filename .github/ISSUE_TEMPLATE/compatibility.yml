@@ -1,0 +1,56 @@
+name: 兼容性结果
+description: 报告一次成功或失败的整合包设置迁移
+title: "[兼容性] "
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢帮助验证兼容性。请勿上传完整实例、服务器地址、账号数据、访问令牌或含用户名的绝对路径。
+  - type: input
+    id: blockferry
+    attributes:
+      label: BlockFerry 版本
+      placeholder: 0.1.0-beta.4
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: 游戏与模组版本
+      description: Minecraft、加载器、来源/目标整合包、JEI 或相关模组的版本
+    validations:
+      required: true
+  - type: dropdown
+    id: initialized
+    attributes:
+      label: 同步前目标实例是否启动过
+      options:
+        - 从未启动
+        - 已进入过主菜单
+        - 已进入过世界或服务器
+    validations:
+      required: true
+  - type: checkboxes
+    id: categories
+    attributes:
+      label: 测试内容
+      options:
+        - label: Vanilla 设置
+        - label: JEI 收藏
+        - label: Dark Mode Everywhere
+        - label: Extreme Sound Muffler
+  - type: textarea
+    id: result
+    attributes:
+      label: 重启游戏后的结果
+      description: 哪些项目成功、跳过或失败，以及 BlockFerry 显示的非敏感提示
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除私人路径、服务器地址、令牌、聊天和世界数据
+          required: true

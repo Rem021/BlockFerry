@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="BlockFerry.App.WinUI.Controls.ConflictResolutionControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="4">
+        <TextBlock
+            x:Name="ConflictTitleText"
+            FontWeight="SemiBold"
+            Foreground="{ThemeResource DrawerTextBrush}"
+            TextTrimming="CharacterEllipsis" />
+        <TextBlock
+            x:Name="ConflictDescriptionText"
+            FontSize="12"
+            Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="Wrap" />
+        <RadioButtons
+            x:Name="ResolutionChoices"
+            AutomationProperties.Name="冲突处理方式"
+            SelectionChanged="ResolutionChoices_SelectionChanged">
+            <x:String>保留目标</x:String>
+            <x:String>采用来源</x:String>
+            <x:String>跳过此项</x:String>
+        </RadioButtons>
+    </StackPanel>
+</UserControl>

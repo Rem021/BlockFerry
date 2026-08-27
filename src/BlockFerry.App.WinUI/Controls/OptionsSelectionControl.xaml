@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="BlockFerry.App.WinUI.Controls.OptionsSelectionControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="18"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource DrawerTextBrush}"
+                Text="自定义选择" />
+            <Button
+                x:Name="ResetSelectionButton"
+                Grid.Column="1"
+                MinHeight="40"
+                Click="ResetSelectionButton_Click"
+                Content="恢复全选"
+                Style="{StaticResource QuietButtonStyle}" />
+        </Grid>
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel
+                x:Name="CategoriesPanel"
+                Spacing="8" />
+        </ScrollViewer>
+        <Border
+            x:Name="LockedSafetyStrip"
+            Grid.Row="2"
+            Padding="12"
+            Background="{ThemeResource OptionLockedSafetyStripBrush}"
+            BorderBrush="{ThemeResource OptionCardStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="16"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon
+                    x:Name="LockedSafetyIcon"
+                    Width="20"
+                    Height="20"
+                    VerticalAlignment="Top"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Foreground="{ThemeResource OptionCardIconForegroundBrush}"
+                    IsHitTestVisible="False"
+                    Symbol="Admin" />
+                <StackPanel
+                    Grid.Column="1"
+                    Spacing="3">
+                    <TextBlock
+                        x:Name="LockedSafetyTitleText"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource DrawerTextBrush}"
+                        Text="整合包保护" />
+                    <TextBlock
+                        x:Name="LockedSafetySummaryText"
+                        Foreground="{ThemeResource DrawerTextBrush}"
+                        Text="已保护 0 项" />
+                    <TextBlock
+                        x:Name="LockedSafetyBodyText"
+                        Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                        Text="资源包结构和版本标记将保留目标值。"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

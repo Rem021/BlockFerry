@@ -1,0 +1,43 @@
+name: Bug 报告
+description: 报告可复现的问题；不要上传私人实例文件或账号数据
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请删除用户名、绝对路径、服务器地址、令牌、聊天和世界数据。安全漏洞请使用 Security 页面私密报告。
+  - type: input
+    id: version
+    attributes:
+      label: BlockFerry 版本
+      placeholder: 0.1.0-beta.4
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: Windows、启动器、Minecraft、模组及其版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 使用经过脱敏的最小步骤；不要上传真实实例压缩包
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果与实际结果
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除私人路径、服务器地址、令牌、聊天和世界数据
+          required: true
