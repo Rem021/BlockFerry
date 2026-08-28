@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A 52-DIP custom title bar sits over one continuous full-window scene. -->
+<!-- A native tall title bar keeps custom actions on the same baseline as Windows caption buttons. -->
 <Window
     x:Class="BlockFerry.App.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -50,7 +50,7 @@
 
         <Grid x:Name="ContentLayer">
             <Grid.RowDefinitions>
-                <RowDefinition Height="52" />
+                <RowDefinition Height="48" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -77,6 +77,8 @@
                           Background="Transparent" />
 
                     <StackPanel Grid.Column="0"
+                                Height="32"
+                                VerticalAlignment="Center"
                                 IsHitTestVisible="False"
                                 Orientation="Horizontal"
                                 Spacing="10">
@@ -104,13 +106,14 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2"
-                                Height="32"
-                                VerticalAlignment="Top"
+                                Height="48"
+                                VerticalAlignment="Center"
                                 Orientation="Horizontal"
                                 Spacing="0">
                         <Button x:Name="UpdateButton"
-                                Height="32"
-                                MinHeight="32"
+                                Height="36"
+                                MinHeight="36"
+                                VerticalAlignment="Center"
                                 Padding="11,0"
                                 AutomationProperties.Name="查看 BlockFerry 新版本"
                                 Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
@@ -136,6 +139,29 @@
                                 Style="{StaticResource TitleBarChromeButtonStyle}"
                                 ToolTipService.ToolTip="切换颜色主题">
                             <FontIcon x:Name="ThemeGlyph" FontSize="16" Glyph="&#xE706;" />
+                        </Button>
+                        <Button x:Name="LanguageButton"
+                                AutomationProperties.Name="Switch interface language"
+                                Click="LanguageButton_Click"
+                                Style="{StaticResource TitleBarChromeButtonStyle}"
+                                ToolTipService.ToolTip="Switch to English">
+                            <Grid Width="46"
+                                  Height="48"
+                                  AutomationProperties.AccessibilityView="Raw"
+                                  IsHitTestVisible="False">
+                                <TextBlock x:Name="LanguageButtonText"
+                                           Width="28"
+                                           Height="18"
+                                           Margin="0,-2,0,2"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontFamily="{StaticResource AppFontFamily}"
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           LineHeight="16"
+                                           Text="EN"
+                                           TextAlignment="Center" />
+                            </Grid>
                         </Button>
                     </StackPanel>
                 </Grid>

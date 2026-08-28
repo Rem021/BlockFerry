@@ -217,6 +217,7 @@ static void CoordinatorKeepsSuccessAfterDurableCommitMarker()
         new ScriptedFaultInjector(MigrationFaultPoint.CommittedFlushed),
         out _);
     var expected = acceptedPlan.AdapterStages[adapter.Id].Mutations.Single().AfterBytes.CopyBytes();
+    var observedProgress = new List<MigrationProgress>();
     try
     {
         var result = coordinator.ExecuteAsync(
@@ -225,12 +226,17 @@ static void CoordinatorKeepsSuccessAfterDurableCommitMarker()
                 fixture.Source.Id,
                 fixture.Target.Id,
                 lease,
-                context)
+                context,
+                progress: new InlineProgress<MigrationProgress>(observedProgress.Add))
             .GetAwaiter()
             .GetResult();
         Assert(result.Status == MigrationExecutionStatus.Succeeded &&
                File.ReadAllBytes(Path.Combine(fixture.TargetRootPath, "options.txt")).SequenceEqual(expected),
             "Once authenticated Committed is durable, a later notification failure must not roll back or report recovery-required.");
+        AssertTruthfulSuccessfulProgress(
+            observedProgress,
+            expectedMutationCount: 1,
+            "durable-commit-exception");
     }
     finally
     {
@@ -2366,6 +2372,7 @@ static void CoordinatorCommitsOnlyAfterFinalVerification()
     var targetFile = Path.Combine(fixture.TargetRootPath, "options.txt");
     var sourceBefore = fixture.Sandbox.SnapshotTree(fixture.SourceRootPath);
     var expected = acceptedPlan.AdapterStages[adapter.Id].Mutations.Single().AfterBytes.CopyBytes();
+    var observedProgress = new List<MigrationProgress>();
     try
     {
         var result = coordinator.ExecuteAsync(
@@ -2375,6 +2382,7 @@ static void CoordinatorCommitsOnlyAfterFinalVerification()
                 fixture.Target.Id,
                 lease,
                 context,
+                progress: new InlineProgress<MigrationProgress>(observedProgress.Add),
                 cancellationToken: CancellationToken.None)
             .GetAwaiter()
             .GetResult();
@@ -2409,6 +2417,10 @@ static void CoordinatorCommitsOnlyAfterFinalVerification()
         Assert(observed.Contains(MigrationFaultPoint.FinalRereadVerified) &&
                observed[^1] == MigrationFaultPoint.CommittedFlushed,
             "Committed must be the final accepted coordinator fault point after full reread verification.");
+        AssertTruthfulSuccessfulProgress(
+            observedProgress,
+            acceptedPlan.AdapterStages.Values.Sum(stage => stage.Mutations.Count),
+            "existing-target");
     }
     finally
     {
@@ -2553,13 +2565,15 @@ static void AppearanceAdapterSeedsMissingTargetAndUndoRemovesIt()
         runtimeFactory,
         new ScriptedFaultInjector(),
         out _);
+    var observedProgress = new List<MigrationProgress>();
     var result = coordinator.ExecuteAsync(
             accepted.Plan!,
             session,
             fixture.Source.Id,
             fixture.Target.Id,
             lease,
-            context)
+            context,
+            progress: new InlineProgress<MigrationProgress>(observedProgress.Add))
         .GetAwaiter()
         .GetResult();
     var targetPath = Path.Combine(fixture.TargetRootPath, relativePath);
@@ -2567,6 +2581,10 @@ static void AppearanceAdapterSeedsMissingTargetAndUndoRemovesIt()
            result.CommittedFileCount == 1 &&
            File.ReadAllBytes(targetPath).SequenceEqual(sourceBytes),
         "The transaction must create the validated DME config before target first launch.");
+    AssertTruthfulSuccessfulProgress(
+        observedProgress,
+        accepted.Plan!.AdapterStages.Values.Sum(stage => stage.Mutations.Count),
+        "missing-target");
 
     var undone = CreateFixtureRecovery(runtimeFactory, fixture.AuditedCapability, out _)
         .UndoAsync(result.TransactionId!.Value)
@@ -5282,6 +5300,47 @@ static string FindProductionRoot()
     }
 
     throw new InvalidOperationException("Could not locate the production source root for static authority scanning.");
+}
+
+static void AssertTruthfulSuccessfulProgress(
+    IReadOnlyList<MigrationProgress> observed,
+    int expectedMutationCount,
+    string scenario)
+{
+    var expectedTotal = checked((expectedMutationCount * 4) + 3);
+    var indeterminate = observed
+        .TakeWhile(progress => progress.TotalSteps <= 0)
+        .ToArray();
+    var determinate = observed
+        .Skip(indeterminate.Length)
+        .ToArray();
+
+    Assert(indeterminate.Length >= 3 &&
+           indeterminate.All(progress =>
+               progress.CompletedSteps == 0 &&
+               progress.TotalSteps <= 0),
+        $"Progress/{scenario}: preflight and target-stability waits must be indeterminate.");
+    Assert(determinate.Length > 0 &&
+           determinate.All(progress =>
+               progress.TotalSteps == expectedTotal &&
+               progress.CompletedSteps >= 1 &&
+               progress.CompletedSteps <= progress.TotalSteps),
+        $"Progress/{scenario}: determinate work must use one stable truthful ledger.");
+    Assert(determinate
+               .Select(progress => progress.CompletedSteps)
+               .Distinct()
+               .SequenceEqual(Enumerable.Range(1, expectedTotal)),
+        $"Progress/{scenario}: every real 4N+3 work unit must be observable without a terminal jump.");
+    Assert(determinate
+               .Zip(determinate.Skip(1))
+               .All(pair => pair.Second.CompletedSteps >= pair.First.CompletedSteps),
+        $"Progress/{scenario}: completed work must be monotonic.");
+    Assert(determinate
+               .Take(determinate.Length - 1)
+               .All(progress => progress.CompletedSteps < progress.TotalSteps) &&
+           determinate[^1].Stage == MigrationProgressStage.Completed &&
+           determinate[^1].CompletedSteps == expectedTotal,
+        $"Progress/{scenario}: 100% must occur only at the final completed notification.");
 }
 
 static void Assert(bool condition, string message)

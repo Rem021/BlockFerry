@@ -1,4 +1,6 @@
 using BlockFerry.App.WinUI.Services;
+using BlockFerry.App.WinUI.Selection;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.Core.Content;
 using BlockFerry.Core.Pcl2;
 using BlockFerry.Core.Transactions;
@@ -7,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace BlockFerry.App.WinUI;
 
@@ -17,6 +20,10 @@ public sealed partial class MainPage
     private IFolderPickerService? _workflowFolderPicker;
     private IReadOnlyList<ContentCatalog>? _presentedWorkflowCatalogs;
     private IReadOnlyList<ContentPlanItem>? _presentedReviewItems;
+    private MigrationWorkflowPhase? _presentedWorkflowPhase;
+    private MigrationProgressStage? _presentedExecutionStage;
+    private long _presentedCommittedFeedbackGeneration = -1;
+    private TransactionId? _presentedCommittedFeedbackTransactionId;
     private bool _workflowStarted;
 
     internal MainPage(
@@ -67,17 +74,41 @@ public sealed partial class MainPage
         PresentWorkflowState(next);
     }
 
-    private void PresentWorkflowState(MigrationWorkflowState workflowState)
+    private void PresentWorkflowState(
+        MigrationWorkflowState workflowState,
+        bool forceProjection = false)
     {
         if (_disposed)
         {
             return;
         }
 
+        var wasMutationInProgress = _presentedWorkflowPhase is
+            MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack;
+        var workspaceNavigation = ExecutionWorkspaceNavigationPolicy.Evaluate(
+            _presentedWorkflowPhase,
+            workflowState,
+            _drawerLifecycle.Phase);
+        if (workflowState.IsMutationInProgress && !wasMutationInProgress)
+        {
+            _executionProgressAccumulator.Reset();
+        }
+
+        if (!forceProjection &&
+            _presentedWorkflowPhase == workflowState.Phase &&
+            workflowState.Phase is MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack)
+        {
+            PresentWorkflowProgress(workflowState);
+            return;
+        }
+
+        var phaseChanged = _presentedWorkflowPhase != workflowState.Phase;
+
         _viewState = workflowState.ViewState;
         ProjectViewState(_viewState);
         ScanStatusText.Text = workflowState.StatusText;
         RecoveryStatusText.Text = workflowState.StatusText;
+        SetDiscoveryActivity(workflowState.Phase == MigrationWorkflowPhase.Discovering || _discoveryInFlight);
         _discoveredInstances = workflowState.Instances;
 
         _updatingPickers = true;
@@ -112,16 +143,23 @@ public sealed partial class MainPage
         AutomationProperties.SetHelpText(
             DrawerCloseButton,
             isMutationInProgress
-                ? "安全事务正在提交或回滚；此面板会保持打开并显示当前进度。"
-                : "关闭设置选择面板。");
+                ? "同步会在主页继续显示进度；事务完成前请保持程序打开。"
+                : "返回主页。");
         var hasRealCatalogs = workflowState.Catalogs.Count > 0 && !isDemo;
+        var showExecution = workflowState.Phase is
+            MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack;
         var showResult = workflowState.Phase is
                              MigrationWorkflowPhase.Reviewing or
-                             MigrationWorkflowPhase.Executing or
-                             MigrationWorkflowPhase.RollingBack or
                              MigrationWorkflowPhase.Succeeded ||
-                         workflowState.Phase == MigrationWorkflowPhase.Blocked &&
-                         workflowState.ReviewItems.Count > 0;
+                          workflowState.Phase == MigrationWorkflowPhase.Blocked &&
+                          workflowState.ReviewItems.Count > 0;
+        var showSelection = !showExecution && !showResult;
+        WorkspaceSelectionLayout.Visibility = showSelection
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ExecutionExperience.Visibility = showExecution
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         RecoveryCard.Visibility = recoveryRequired ? Visibility.Visible : Visibility.Collapsed;
         RecoveryFolderButton.Visibility = recoveryRequired &&
                                           !recoveryAuthenticationFailed &&
@@ -172,7 +210,16 @@ public sealed partial class MainPage
         if (showResult)
         {
             PresentWorkflowResult(workflowState);
+            QueueSubtreeLocalization(ResultCard);
         }
+
+        if (showExecution)
+        {
+            PresentExecutionExperience(workflowState);
+            QueueSubtreeLocalization(ExecutionExperience);
+        }
+
+        UpdateWorkspaceStageRail(workflowState.Phase);
 
         SafetyBoundaryText.Text = workflowState.Phase switch
         {
@@ -195,9 +242,20 @@ public sealed partial class MainPage
         PrimaryActionButton.IsEnabled = !workflowState.IsMutationInProgress;
         switch (workflowState.Phase)
         {
+            case MigrationWorkflowPhase.Discovering:
+                SetSyncPresentation(
+                    SyncPresentationState.Running,
+                    0,
+                    workflowState.StatusText,
+                    workflowState.Progress ?? new MigrationProgress(MigrationProgressStage.Revalidating, 0, 0, workflowState.StatusText));
+                break;
             case MigrationWorkflowPhase.Executing:
             case MigrationWorkflowPhase.RollingBack:
-                SetSyncPresentation(SyncPresentationState.Running, 2, workflowState.StatusText);
+                SetSyncPresentation(
+                    SyncPresentationState.Running,
+                    2,
+                    workflowState.StatusText,
+                    workflowState.Progress);
                 break;
             case MigrationWorkflowPhase.Succeeded:
                 SetSyncPresentation(SyncPresentationState.Completed, 3, workflowState.StatusText);
@@ -212,7 +270,218 @@ public sealed partial class MainPage
                 break;
         }
 
+        if (workflowState.Phase == MigrationWorkflowPhase.Succeeded)
+        {
+            PresentCommittedHomeFeedback(workflowState);
+        }
+
         UpdateWorkflowFooter(workflowState);
+        if (phaseChanged && !forceProjection)
+        {
+            AnimateWorkspacePhaseChange(showSelection, showExecution, showResult);
+        }
+
+        _presentedWorkflowPhase = workflowState.Phase;
+        LocalizeElements(
+            ScanStatusText,
+            RecoveryStatusText,
+            SafetyBoundaryText,
+            DrawerCloseButton,
+            ErrorCard,
+            WorkspaceStageRail);
+        switch (workspaceNavigation)
+        {
+            case ExecutionWorkspaceNavigationAction.ShowHome:
+                CloseDrawerForBackgroundExecution();
+                break;
+            case ExecutionWorkspaceNavigationAction.ShowWorkspace:
+                OpenDrawerForWorkflowAttention();
+                break;
+        }
+    }
+
+    private void PresentWorkflowProgress(MigrationWorkflowState workflowState)
+    {
+        ScanStatusText.Text = workflowState.StatusText;
+        RecoveryStatusText.Text = workflowState.StatusText;
+        PresentExecutionExperience(workflowState);
+        SetSyncPresentation(
+            SyncPresentationState.Running,
+            2,
+            workflowState.StatusText,
+            workflowState.Progress);
+        UpdateWorkflowFooter(workflowState);
+        LocalizeElements(ScanStatusText, RecoveryStatusText);
+    }
+
+    private void PresentExecutionExperience(MigrationWorkflowState workflowState)
+    {
+        var presentation = MigrationProgressPresenter.Create(
+            workflowState.Progress,
+            workflowState.StatusText);
+        var stage = workflowState.Progress?.Stage;
+        var stageChanged = _presentedExecutionStage != stage;
+        var displayedPercent = _executionProgressAccumulator.Advance(presentation.Percent);
+
+        ExecutionStageTitleText.Text = presentation.StageText;
+        ExecutionStageDetailText.Text = presentation.DetailText;
+        ExecutionPercentText.Text = presentation.IsIndeterminate
+            ? "…"
+            : $"{Math.Round(displayedPercent):0}%";
+        var continuousMotion = ContinuousMotionPolicy.Allows(
+            active: true,
+            _animationsEnabled,
+            _highContrast);
+        ExecutionActivityRing.IsActive = continuousMotion;
+        ExecutionProgressBar.IsIndeterminate = continuousMotion && presentation.IsIndeterminate;
+        SetExecutionProgressValue(displayedPercent);
+        LocalizeElements(ExecutionStageTextHost);
+
+        if (stageChanged)
+        {
+            UpdateExecutionStepPresentation(stage, workflowState.Phase);
+            PlayReveal(ExecutionStageTextHost, ExecutionStageTextTranslate, 190, 5);
+            _presentedExecutionStage = stage;
+        }
+    }
+
+    private void SetExecutionProgressValue(double value)
+    {
+        value = Math.Clamp(value, 0, 100);
+        var currentValue = ExecutionProgressBar.Value;
+        _executionProgressStoryboard?.Stop();
+        if (!_animationsEnabled || _highContrast || Math.Abs(currentValue - value) < 0.1)
+        {
+            ExecutionProgressBar.Value = value;
+            return;
+        }
+
+        ExecutionProgressBar.Value = value;
+        var animation = new DoubleAnimation
+        {
+            From = currentValue,
+            To = value,
+            Duration = new Duration(TimeSpan.FromMilliseconds(260)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            FillBehavior = FillBehavior.Stop,
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, ExecutionProgressBar);
+        Storyboard.SetTargetProperty(animation, "Value");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        _executionProgressStoryboard = storyboard;
+        storyboard.Begin();
+    }
+
+    private void UpdateExecutionStepPresentation(
+        MigrationProgressStage? stage,
+        MigrationWorkflowPhase phase)
+    {
+        var activeStep = phase == MigrationWorkflowPhase.RollingBack ||
+                         stage == MigrationProgressStage.RollingBack
+            ? 1
+            : stage switch
+            {
+                MigrationProgressStage.PreparingBackup or MigrationProgressStage.BackingUp => 1,
+                MigrationProgressStage.Staging or MigrationProgressStage.Committing => 2,
+                MigrationProgressStage.Verifying or MigrationProgressStage.CleaningUp or
+                    MigrationProgressStage.Completed => 3,
+                _ => 0,
+            };
+        Border[] steps =
+        [
+            ExecutionCheckStep,
+            ExecutionBackupStep,
+            ExecutionCommitStep,
+            ExecutionVerifyStep,
+        ];
+        for (var index = 0; index < steps.Length; index++)
+        {
+            var targetOpacity = index == activeStep
+                ? 1
+                : index < activeStep
+                    ? 0.68
+                    : 0.34;
+            AnimateStageOpacity(steps[index], targetOpacity);
+        }
+    }
+
+    private void UpdateWorkspaceStageRail(MigrationWorkflowPhase phase)
+    {
+        var activeStep = phase switch
+        {
+            MigrationWorkflowPhase.Reviewing => 1,
+            MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack or
+                MigrationWorkflowPhase.Succeeded => 2,
+            MigrationWorkflowPhase.Blocked when _workflow?.State.ReviewItems.Count > 0 => 1,
+            _ => 0,
+        };
+        Border[] steps = [WorkspaceSelectStep, WorkspaceReviewStep, WorkspaceExecuteStep];
+        for (var index = 0; index < steps.Length; index++)
+        {
+            var targetOpacity = _highContrast ? 1 : index == activeStep
+                ? 1
+                : index < activeStep
+                    ? 0.68
+                    : 0.4;
+            steps[index].BorderThickness = new Thickness(index == activeStep ? 2 : 1);
+            AutomationProperties.SetItemStatus(
+                steps[index],
+                index == activeStep ? "当前步骤" : index < activeStep ? "已完成步骤" : "待进行");
+            AnimateStageOpacity(steps[index], targetOpacity);
+        }
+
+        QueueSubtreeLocalization(WorkspaceStageRail);
+    }
+
+    private void AnimateStageOpacity(FrameworkElement element, double targetOpacity)
+    {
+        if (Math.Abs(element.Opacity - targetOpacity) < 0.01)
+        {
+            return;
+        }
+
+        if (!_pageLoaded || !_animationsEnabled || _highContrast)
+        {
+            element.Opacity = targetOpacity;
+            return;
+        }
+
+        var animation = new DoubleAnimation
+        {
+            To = targetOpacity,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(animation, element);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        storyboard.Begin();
+    }
+
+    private void AnimateWorkspacePhaseChange(
+        bool showSelection,
+        bool showExecution,
+        bool showResult)
+    {
+        if (showExecution)
+        {
+            PlayReveal(ExecutionExperience, ExecutionExperienceTranslate, 280, 14);
+            return;
+        }
+
+        if (showResult)
+        {
+            PlayReveal(ResultCard, PreviewResultsTranslate, 250, 12);
+            return;
+        }
+
+        if (showSelection)
+        {
+            PlayReveal(WorkspaceSelectionLayout, WorkspaceSelectionTranslate, 240, 10);
+        }
     }
 
     private void PresentWorkflowResult(MigrationWorkflowState workflowState)
@@ -249,6 +518,7 @@ public sealed partial class MainPage
         {
             _presentedReviewItems = workflowState.ReviewItems;
             MigrationReviewControl.Bind(workflowState.ReviewItems);
+            QueueSubtreeLocalization(MigrationReviewControl);
         }
         PreviewSecondaryCountsText.Text =
             $"将处理 {workflowState.PlannedItemCount} 项内容 · 涉及 {workflowState.PlannedFileCount} 个文件";
@@ -261,30 +531,57 @@ public sealed partial class MainPage
                 : undone
                     ? "目标文件已复读验证为同步前状态"
                     : "执行前会再次核对来源、目标、运行中的 Minecraft 与文件摘要";
-        ModifySelectionButton.Visibility = workflowState.Phase == MigrationWorkflowPhase.Reviewing
+        ModifySelectionButton.Visibility = MigrationWorkflowPolicy.CanReturnToSelection(
+                workflowState.Phase,
+                workflowState.Catalogs.Count > 0,
+                workflowState.IsMutationInProgress)
             ? Visibility.Visible
             : Visibility.Collapsed;
         UndoMigrationButton.Visibility = workflowState.CanUndo
             ? Visibility.Visible
             : Visibility.Collapsed;
+        LocalizeElements(
+            PreviewResultHeading,
+            PreviewSummaryText,
+            PreviewSecondaryCountsText,
+            PreviewPathsText,
+            ModifySelectionButton,
+            UndoMigrationButton);
 
-        if (committed && workflowState.CommittedTransactionId is { } transactionId)
+    }
+
+    private void PresentCommittedHomeFeedback(MigrationWorkflowState workflowState)
+    {
+        if (_workflow is null ||
+            workflowState.LastExecutionStatus != MigrationExecutionStatus.Succeeded ||
+            workflowState.HasDeferredJeiSync ||
+            workflowState.CommittedTransactionId is not { } transactionId ||
+            _presentedCommittedFeedbackGeneration == workflowState.Generation &&
+            _presentedCommittedFeedbackTransactionId == transactionId)
         {
-            var resultPresented = ResultCard.Visibility == Visibility.Visible;
-            var focusAccepted = PreviewResultHeading.Focus(FocusState.Programmatic);
-            var validAutomationPeer = false;
-            var notificationInvokedSuccessfully = false;
+            return;
+        }
+
+        var resultPresented = _pageLoaded &&
+                              _drawerLifecycle.Phase == DrawerModalPhase.Collapsed &&
+                              DrawerLayer.Visibility == Visibility.Collapsed;
+        var focusAccepted = false;
+        var validAutomationPeer = false;
+        var notificationInvokedSuccessfully = false;
+        if (resultPresented)
+        {
+            focusAccepted = PrimaryActionButton.Focus(FocusState.Programmatic);
             try
             {
-                var peer = FrameworkElementAutomationPeer.FromElement(PreviewResultHeading) ??
-                           FrameworkElementAutomationPeer.CreatePeerForElement(PreviewResultHeading);
+                var peer = FrameworkElementAutomationPeer.FromElement(PrimaryActionButton) ??
+                           FrameworkElementAutomationPeer.CreatePeerForElement(PrimaryActionButton);
                 if (peer is not null)
                 {
                     validAutomationPeer = true;
                     peer.RaiseNotificationEvent(
                         AutomationNotificationKind.ActionCompleted,
                         AutomationNotificationProcessing.MostRecent,
-                        workflowState.StatusText,
+                        UiText.Translate(workflowState.StatusText),
                         "BlockFerry.Migration.Committed");
                     notificationInvokedSuccessfully = true;
                 }
@@ -294,14 +591,26 @@ public sealed partial class MainPage
                 validAutomationPeer = false;
                 notificationInvokedSuccessfully = false;
             }
+        }
 
-            _workflow?.TryPlayCommittedSound(
+        if (_workflow.TryPlayCommittedSound(
                 workflowState.Generation,
                 transactionId,
                 resultPresented,
                 focusAccepted,
                 validAutomationPeer,
-                notificationInvokedSuccessfully);
+                notificationInvokedSuccessfully))
+        {
+            _presentedCommittedFeedbackGeneration = workflowState.Generation;
+            _presentedCommittedFeedbackTransactionId = transactionId;
+        }
+    }
+
+    private void RetryCommittedHomeFeedbackFromCurrentState()
+    {
+        if (_workflow is not null)
+        {
+            PresentCommittedHomeFeedback(_workflow.State);
         }
     }
 
@@ -312,10 +621,22 @@ public sealed partial class MainPage
             return;
         }
 
-        var selection = _contentSelectionViewModel.CaptureSelection();
+        var migrationRunning = workflowState.Phase is
+            MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack;
+        var progressPresentation = MigrationProgressPresenter.Create(
+            workflowState.Progress,
+            workflowState.StatusText);
+        var displayedPercent = migrationRunning
+            ? _executionProgressAccumulator.Current
+            : progressPresentation.Percent;
+        SetDrawerActivity(
+            migrationRunning,
+            migrationRunning && progressPresentation.IsIndeterminate,
+            displayedPercent);
         switch (workflowState.Phase)
         {
             case MigrationWorkflowPhase.Selecting:
+                var selection = _contentSelectionViewModel.CaptureSelection();
                 SelectedCountFooterText.Text = $"已选 {selection.SelectedItems.Count} 项内容";
                 DryRunPreviewButton.Content = "检查同步计划";
                 DryRunPreviewButton.IsEnabled =
@@ -336,16 +657,44 @@ public sealed partial class MainPage
                 break;
             case MigrationWorkflowPhase.Executing:
             case MigrationWorkflowPhase.RollingBack:
-                SelectedCountFooterText.Text = workflowState.StatusText;
+                SelectedCountFooterText.Text = progressPresentation.IsIndeterminate
+                    ? progressPresentation.StageText
+                    : $"{progressPresentation.StageText} · {Math.Round(displayedPercent):0}%";
                 DryRunPreviewButton.Content = "正在安全处理…";
                 DryRunPreviewButton.IsEnabled = false;
                 break;
+            case MigrationWorkflowPhase.Blocked when workflowState.Catalogs.Count > 0:
+                var blockedSelection = _contentSelectionViewModel.CaptureSelection();
+                SelectedCountFooterText.Text = $"已选 {blockedSelection.SelectedItems.Count} 项内容";
+                DryRunPreviewButton.Content = "重新检查同步计划";
+                DryRunPreviewButton.IsEnabled =
+                    blockedSelection.SelectedItems.Count > 0 &&
+                    !_contentSelectionViewModel.HasUnresolvedConflicts;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    DryRunPreviewButton,
+                    "重新检查同步计划；此步骤不写入文件");
+                break;
             case MigrationWorkflowPhase.Succeeded:
                 SelectedCountFooterText.Text = workflowState.StatusText;
-                DryRunPreviewButton.Content = workflowState.HasDeferredJeiSync
-                    ? "等待 JEI 复核"
-                    : "同步已验证";
-                DryRunPreviewButton.IsEnabled = false;
+                var canStartAnotherSync = MigrationWorkflowPolicy.CanStartAnotherSync(
+                    workflowState.Phase,
+                    workflowState.LastExecutionStatus,
+                    workflowState.HasDeferredJeiSync,
+                    workflowState.IsMutationInProgress,
+                    workflowState.SourceInstanceId is not null &&
+                    workflowState.TargetInstanceId is not null);
+                DryRunPreviewButton.Content = canStartAnotherSync ? "再次同步" : "同步已验证";
+                if (workflowState.HasDeferredJeiSync)
+                {
+                    DryRunPreviewButton.Content = "等待 JEI 复核";
+                }
+
+                DryRunPreviewButton.IsEnabled = canStartAnotherSync;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    DryRunPreviewButton,
+                    canStartAnotherSync
+                        ? "重新验证实例和内容后开始新的同步"
+                        : DryRunPreviewButton.Content?.ToString() ?? "同步已验证");
                 break;
             case MigrationWorkflowPhase.RecoveryRequired:
                 SelectedCountFooterText.Text = "请先完成上次同步的恢复";
@@ -358,6 +707,8 @@ public sealed partial class MainPage
                 DryRunPreviewButton.IsEnabled = false;
                 break;
         }
+
+        LocalizeElements(SelectedCountFooterText, DryRunPreviewButton);
     }
 
     private async Task RunWorkflowDiscoveryAsync(bool chooseFolder)
@@ -369,6 +720,9 @@ public sealed partial class MainPage
 
         _discoveryInFlight = true;
         SetDiscoveryButtonsEnabled(false);
+        SetDiscoveryActivity(true);
+        ScanStatusText.Text = "正在搜索可用实例…";
+        LocalizeElements(ScanStatusText);
         try
         {
             if (chooseFolder)
@@ -391,6 +745,7 @@ public sealed partial class MainPage
         finally
         {
             _discoveryInFlight = false;
+            SetDiscoveryActivity(false);
             if (!_disposed)
             {
                 PresentWorkflowState(_workflow.State);
@@ -405,14 +760,30 @@ public sealed partial class MainPage
             return;
         }
 
-        if (_workflow.State.Phase == MigrationWorkflowPhase.Reviewing)
+        var snapshot = _workflow.State;
+        var sourceId = snapshot.SourceInstanceId;
+        var targetId = snapshot.TargetInstanceId;
+        if (MigrationWorkflowPolicy.CanStartAnotherSync(
+                snapshot.Phase,
+                snapshot.LastExecutionStatus,
+                snapshot.HasDeferredJeiSync,
+                snapshot.IsMutationInProgress,
+                sourceId is not null && targetId is not null) &&
+            sourceId is not null &&
+            targetId is not null)
+        {
+            await ChangeWorkflowPairAsync(sourceId, targetId);
+            return;
+        }
+
+        if (snapshot.Phase == MigrationWorkflowPhase.Reviewing)
         {
             await _workflow.ExecuteAsync(_workflowLifetime.Token);
             return;
         }
 
-        if (_workflow.State.Phase is MigrationWorkflowPhase.Selecting or MigrationWorkflowPhase.Blocked &&
-            _workflow.State.Catalogs.Count > 0)
+        if (snapshot.Phase is MigrationWorkflowPhase.Selecting or MigrationWorkflowPhase.Blocked &&
+            snapshot.Catalogs.Count > 0)
         {
             await _workflow.PreparePlanAsync(
                 _contentSelectionViewModel.CaptureSelection(),

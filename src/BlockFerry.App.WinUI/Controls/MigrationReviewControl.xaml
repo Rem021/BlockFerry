@@ -14,7 +14,7 @@
                         BorderBrush="{ThemeResource SubtleStrokeBrush}"
                         BorderThickness="1"
                         CornerRadius="14">
-                    <StackPanel Spacing="8">
+                    <StackPanel Spacing="10">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -36,40 +36,111 @@
                                           Glyph="{Binding Glyph}"
                                           IsHitTestVisible="False" />
                             </Border>
-                            <TextBlock Grid.Column="1"
+                            <TextBlock x:Name="ReviewGroupTitleText"
+                                       Grid.Column="1"
                                        VerticalAlignment="Center"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
+                                       FontSize="15"
+                                       FontWeight="Bold"
                                        Foreground="{ThemeResource DrawerTextBrush}"
                                        Text="{Binding Title}" />
                             <TextBlock Grid.Column="2"
                                        VerticalAlignment="Center"
                                        FontSize="12"
+                                       FontWeight="SemiBold"
                                        Foreground="{ThemeResource DrawerSecondaryTextBrush}"
                                        Text="{Binding CountText}" />
                         </Grid>
-                        <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl ItemsSource="{Binding Bundles}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="ReviewItemCard"
+                                    <Border x:Name="ReviewBundleCard"
                                             Margin="0,0,0,6"
-                                            Padding="10"
                                             AutomationProperties.Name="{Binding AutomationName}"
                                             Background="{ThemeResource DrawerSurfaceBrush}"
-                                            CornerRadius="10">
-                                        <StackPanel Spacing="3">
-                                            <TextBlock FontSize="12"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ThemeResource DrawerTextBrush}"
-                                                       Text="{Binding Title}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock FontSize="11"
-                                                       Foreground="{ThemeResource DrawerSecondaryTextBrush}"
-                                                       MaxLines="3"
-                                                       Text="{Binding Summary}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       TextWrapping="Wrap" />
-                                        </StackPanel>
+                                            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="11">
+                                        <Expander x:Name="ReviewBundleExpander"
+                                                  Collapsed="ReviewBundleExpander_Collapsed"
+                                                  Expanding="ReviewBundleExpander_Expanding"
+                                                  HorizontalAlignment="Stretch"
+                                                  HorizontalContentAlignment="Stretch"
+                                                  IsExpanded="False">
+                                            <Expander.Header>
+                                                <Grid MinHeight="52"
+                                                      Padding="12,8,4,8"
+                                                      ColumnSpacing="10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel VerticalAlignment="Center"
+                                                                Spacing="2">
+                                                        <TextBlock x:Name="ReviewBundleTitleText"
+                                                                   FontSize="13"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{ThemeResource DrawerTextBrush}"
+                                                                   Text="{Binding Title}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                                                   MaxLines="2"
+                                                                   Text="{Binding Summary}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <Border Grid.Column="1"
+                                                            MinWidth="42"
+                                                            Padding="8,4"
+                                                            VerticalAlignment="Center"
+                                                            Background="{ThemeResource SubtleSurfaceBrush}"
+                                                            CornerRadius="9">
+                                                        <TextBlock HorizontalAlignment="Center"
+                                                                   FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{ThemeResource DrawerTextBrush}"
+                                                                   Text="{Binding CountText}" />
+                                                    </Border>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <Border Padding="12,0,12,12">
+                                                <ItemsRepeater x:Name="ReviewDetailsItemsControl">
+                                                    <ItemsRepeater.Layout>
+                                                        <UniformGridLayout Orientation="Vertical"
+                                                                           MaximumRowsOrColumns="2"
+                                                                           MinItemWidth="320"
+                                                                           MinColumnSpacing="8"
+                                                                           MinRowSpacing="6"
+                                                                           ItemsStretch="Fill" />
+                                                    </ItemsRepeater.Layout>
+                                                    <ItemsRepeater.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border x:Name="ReviewDetailRow"
+                                                                    Padding="10,8"
+                                                                    AutomationProperties.Name="{Binding AutomationName}"
+                                                                    Background="{ThemeResource SubtleSurfaceBrush}"
+                                                                    CornerRadius="8">
+                                                                <StackPanel Spacing="3">
+                                                                    <TextBlock FontSize="12"
+                                                                               FontWeight="SemiBold"
+                                                                               Foreground="{ThemeResource DrawerTextBrush}"
+                                                                               Text="{Binding Title}"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock FontSize="11"
+                                                                               FontWeight="Medium"
+                                                                               Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                                                               MaxLines="3"
+                                                                               Text="{Binding Summary}"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               TextWrapping="Wrap" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsRepeater.ItemTemplate>
+                                                </ItemsRepeater>
+                                            </Border>
+                                        </Expander>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

@@ -25,7 +25,7 @@
                 Grid.Column="1"
                 MinHeight="40"
                 Click="ResetSelectionButton_Click"
-                Content="恢复全选"
+                Content="全选"
                 Style="{StaticResource QuietButtonStyle}" />
         </Grid>
         <ScrollViewer

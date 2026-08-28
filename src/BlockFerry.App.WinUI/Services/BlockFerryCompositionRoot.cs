@@ -18,16 +18,20 @@ internal sealed class BlockFerryCompositionRoot : IDisposable
     private BlockFerryCompositionRoot(
         AppStorageGuard appStorage,
         MigrationWorkflowCoordinator workflow,
-        IThemePreferenceStore themePreferences)
+        IThemePreferenceStore themePreferences,
+        ILanguagePreferenceStore languagePreferences)
     {
         this.appStorage = appStorage;
         Workflow = workflow;
         ThemePreferences = themePreferences;
+        LanguagePreferences = languagePreferences;
     }
 
     internal MigrationWorkflowCoordinator Workflow { get; }
 
     internal IThemePreferenceStore ThemePreferences { get; }
+
+    internal ILanguagePreferenceStore LanguagePreferences { get; }
 
     internal Task DisposalCompletion => disposalCompletion;
 
@@ -115,7 +119,8 @@ internal sealed class BlockFerryCompositionRoot : IDisposable
         return new BlockFerryCompositionRoot(
             appStorage,
             workflow,
-            new ThemePreferenceStore(appStorage));
+            new ThemePreferenceStore(appStorage),
+            new LanguagePreferenceStore(appStorage));
     }
 
     public void Dispose()

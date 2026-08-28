@@ -20,31 +20,31 @@
                 CornerRadius="16"
                 IsHitTestVisible="False"
                 Opacity="0" />
-            <StackPanel Padding="12" Spacing="8">
-                <Grid ColumnSpacing="8">
+            <StackPanel Padding="16" Spacing="10">
+                <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <CheckBox
                         x:Name="AdapterCheckBox"
-                        MinHeight="44"
+                        MinHeight="58"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
                         Click="AdapterCheckBox_Click"
                         UseSystemFocusVisuals="True">
-                        <Grid ColumnSpacing="10">
+                        <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border
-                                Width="34"
-                                Height="34"
+                                Width="38"
+                                Height="38"
                                 VerticalAlignment="Center"
                                 AutomationProperties.AccessibilityView="Raw"
                                 Background="{ThemeResource OptionCardIconSurfaceBrush}"
-                                CornerRadius="10"
+                                CornerRadius="11"
                                 IsHitTestVisible="False">
                                 <SymbolIcon
                                     x:Name="AdapterIcon"
@@ -60,18 +60,22 @@
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <TextBlock
                                     x:Name="AdapterTitleText"
-                                    FontWeight="SemiBold"
+                                    FontSize="15"
+                                    FontWeight="Bold"
                                     Foreground="{ThemeResource DrawerTextBrush}"
                                     Text="同步内容" />
                                 <TextBlock
                                     x:Name="AdapterDescriptionText"
                                     FontSize="12"
                                     Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                    MaxLines="2"
                                     Text="正在读取内容"
-                                    TextTrimming="CharacterEllipsis" />
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap" />
                                 <TextBlock
                                     x:Name="AdapterSummaryText"
                                     FontSize="12"
+                                    FontWeight="SemiBold"
                                     Foreground="{ThemeResource DrawerTextBrush}"
                                     Text="等待读取实例内容" />
                             </StackPanel>
@@ -84,6 +88,8 @@
                         Height="40"
                         VerticalAlignment="Center"
                         AutomationProperties.Name="展开同步内容详情"
+                        FontFamily="Segoe MDL2 Assets"
+                        FontSize="14"
                         IsExpanded="False"
                         Style="{StaticResource QuietButtonStyle}"
                         UseSystemFocusVisuals="True" />

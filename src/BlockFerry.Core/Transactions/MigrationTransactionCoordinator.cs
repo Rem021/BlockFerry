@@ -179,7 +179,7 @@ internal sealed partial class MigrationTransactionCoordinator
         IProgress<MigrationProgress>? progress,
         CancellationToken cancellationToken)
     {
-        Report(progress, MigrationProgressStage.Revalidating, 0, 1, "正在重新确认来源、目标和同步清单");
+        Report(progress, MigrationProgressStage.Revalidating, 0, 0, "正在重新确认来源、目标和同步清单");
         if (!TryCreateExecutionAuthority(
                 plan,
                 session,
@@ -210,11 +210,11 @@ internal sealed partial class MigrationTransactionCoordinator
         {
             using var targetMutex = mutexFactory.Acquire(authority!, cancellationToken);
             faultInjector.Hit(MigrationFaultPoint.MutexAcquired);
-            Report(progress, MigrationProgressStage.CheckingRunningGames, 0, 1, "正在确认 Minecraft 已关闭");
+            Report(progress, MigrationProgressStage.CheckingRunningGames, 0, 0, "正在确认 Minecraft 已关闭");
             using var runningGameGuard = processGuard.Begin(authority!, cancellationToken);
             faultInjector.Hit(MigrationFaultPoint.ProcessGuardStarted);
 
-            Report(progress, MigrationProgressStage.Revalidating, 0, 1, "正在确认 PCL 已完成实例写入");
+            Report(progress, MigrationProgressStage.Revalidating, 0, 0, "正在确认 PCL 已完成实例写入");
             if (!targetStabilityGate.WaitUntilStable(
                     authority!.CurrentPairEvidence.Target.GameRoot.CanonicalPath,
                     cancellationToken))
@@ -241,43 +241,47 @@ internal sealed partial class MigrationTransactionCoordinator
 
             var mutations = OrderedMutations(plan);
             var totalSteps = checked((mutations.Count * 4) + 3);
-            var completedSteps = 0;
+            var completedSteps = 1;
             var backups = new Dictionary<string, BackupObject>(StringComparer.Ordinal);
-            Report(progress, MigrationProgressStage.PreparingBackup, completedSteps, totalSteps, "正在创建可验证还原点");
-            foreach (var mutation in mutations.Where(item => item.Mutation.Change.TargetSnapshot.Exists))
+            Report(progress, MigrationProgressStage.PreparingBackup, completedSteps, totalSteps, "已重新读取并验证全部输入");
+            foreach (var mutation in mutations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                runningGameGuard.EnsureSafeBeforeMutation(cancellationToken);
-                EnsureAuthorityLive(plan, session, sourceId, targetId, contentLease, contentContext);
-                var permit = runtime.Store.Journal.AppendIntent(
-                    TransactionIntent.Create(
-                        TransactionRecordKind.BackupIntent,
-                        mutation.OpaqueObjectId,
-                        mutation.Path,
-                        mutation.Mutation.Change.TargetSnapshot.Sha256),
-                    cancellationToken);
-                faultInjector.Hit(MigrationFaultPoint.BackupIntentFlushed);
-                var backup = runtime.FileOperations.BackupExisting(
-                    targetRoot,
-                    mutation.Mutation.Change,
-                    permit,
-                    cancellationToken);
-                runtime.Store.Journal.AppendVerified(
-                    permit,
-                    TransactionVerification.Create(
-                        TransactionRecordKind.BackupVerified,
-                        mutation.OpaqueObjectId,
-                        mutation.Path,
-                        backup.Metadata.Sha256),
-                    cancellationToken);
-                backups.Add(mutation.OpaqueObjectId, backup);
-                faultInjector.Hit(MigrationFaultPoint.BackupVerified);
+                if (mutation.Mutation.Change.TargetSnapshot.Exists)
+                {
+                    runningGameGuard.EnsureSafeBeforeMutation(cancellationToken);
+                    EnsureAuthorityLive(plan, session, sourceId, targetId, contentLease, contentContext);
+                    var permit = runtime.Store.Journal.AppendIntent(
+                        TransactionIntent.Create(
+                            TransactionRecordKind.BackupIntent,
+                            mutation.OpaqueObjectId,
+                            mutation.Path,
+                            mutation.Mutation.Change.TargetSnapshot.Sha256),
+                        cancellationToken);
+                    faultInjector.Hit(MigrationFaultPoint.BackupIntentFlushed);
+                    var backup = runtime.FileOperations.BackupExisting(
+                        targetRoot,
+                        mutation.Mutation.Change,
+                        permit,
+                        cancellationToken);
+                    runtime.Store.Journal.AppendVerified(
+                        permit,
+                        TransactionVerification.Create(
+                            TransactionRecordKind.BackupVerified,
+                            mutation.OpaqueObjectId,
+                            mutation.Path,
+                            backup.Metadata.Sha256),
+                        cancellationToken);
+                    backups.Add(mutation.OpaqueObjectId, backup);
+                    faultInjector.Hit(MigrationFaultPoint.BackupVerified);
+                }
+
                 Report(
                     progress,
                     MigrationProgressStage.BackingUp,
                     ++completedSteps,
                     totalSteps,
-                    $"已备份 {backups.Count} 个目标文件");
+                    $"已检查 {completedSteps - 1} / {mutations.Count} 个还原点；备份 {backups.Count} 个文件");
             }
 
             var missingDirectories = mutations
@@ -380,6 +384,12 @@ internal sealed partial class MigrationTransactionCoordinator
                         bytes,
                         expectedAfterMetadata,
                         cancellationToken);
+                    Report(
+                        progress,
+                        MigrationProgressStage.Staging,
+                        ++completedSteps,
+                        totalSteps,
+                        $"已封存 {completedSteps - ((mutations.Count * 2) + 1)} / {mutations.Count} 个验证副本");
                 }
                 finally
                 {
@@ -457,6 +467,12 @@ internal sealed partial class MigrationTransactionCoordinator
                 totalSteps,
                 "已复读并验证全部同步结果");
 
+            Report(
+                progress,
+                MigrationProgressStage.CleaningUp,
+                completedSteps,
+                totalSteps,
+                "正在封存事务记录并清理临时文件");
             runtime.Store.Journal.AppendTerminal(
                 TransactionRecordKind.Committed,
                 plan.IntegrityDigest,
@@ -487,7 +503,7 @@ internal sealed partial class MigrationTransactionCoordinator
             Report(
                 progress,
                 MigrationProgressStage.Completed,
-                totalSteps,
+                ++completedSteps,
                 totalSteps,
                 $"已验证完成 {committed.Count} 个文件");
             return MigrationExecutionResult.Create(
@@ -517,6 +533,21 @@ internal sealed partial class MigrationTransactionCoordinator
         {
             if (runtime is not null && IsDurablyCommitted(runtime.Store, plan.IntegrityDigest))
             {
+                var committedTotalSteps = checked((committed.Count * 4) + 3);
+                try
+                {
+                    Report(
+                        progress,
+                        MigrationProgressStage.Completed,
+                        committedTotalSteps,
+                        committedTotalSteps,
+                        $"已验证完成 {committed.Count} 个文件");
+                }
+                catch (Exception progressException) when (IsExpectedExecutionFailure(progressException))
+                {
+                    // A presentation observer cannot overturn an authenticated durable commit.
+                }
+
                 return MigrationExecutionResult.Create(
                     MigrationExecutionStatus.Succeeded,
                     transactionId,

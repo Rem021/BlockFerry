@@ -420,7 +420,7 @@ internal sealed class MigrationWorkflowCoordinator : IDisposable
                 Progress = new MigrationProgress(
                     MigrationProgressStage.Revalidating,
                     0,
-                    1,
+                    0,
                     "正在重新确认实例与同步清单"),
             });
             var operation = BeginMutationOperation();
@@ -989,7 +989,10 @@ internal sealed class MigrationWorkflowCoordinator : IDisposable
             }
 
             acceptedPlan = null;
-            if (State.Phase == MigrationWorkflowPhase.Reviewing)
+            if (MigrationWorkflowPolicy.CanReturnToSelection(
+                    State.Phase,
+                    State.Catalogs.Count > 0,
+                    State.IsMutationInProgress))
             {
                 Publish(State with
                 {
@@ -1119,7 +1122,7 @@ internal sealed class MigrationWorkflowCoordinator : IDisposable
         acceptedPlan = null;
         Publish(State with
         {
-            Phase = MigrationWorkflowPhase.Selecting,
+            Phase = MigrationWorkflowPhase.Discovering,
             Generation = sessionHandle.Generation,
             Instances = sessionHandle.Instances.ToArray(),
             SourceInstanceId = sourceId,
@@ -1129,6 +1132,11 @@ internal sealed class MigrationWorkflowCoordinator : IDisposable
             Compatibility = null,
             ReviewItems = Array.Empty<ContentPlanItem>(),
             StatusText = "正在识别原版设置、界面外观、JEI 收藏与静音规则…",
+            Progress = new MigrationProgress(
+                MigrationProgressStage.Revalidating,
+                0,
+                0,
+                "正在重新读取实例与可同步内容"),
             PendingRecovery = null,
             CommittedTransactionId = null,
             LastExecutionStatus = null,
@@ -1193,6 +1201,7 @@ internal sealed class MigrationWorkflowCoordinator : IDisposable
             Compatibility = ContentCompatibilityDisplayEvidence.FromCore(
                 prepared.Context.Compatibility),
             StatusText = "内容识别完成；请选择要同步的项目。",
+            Progress = null,
         });
         ActivateDeferredJeiForCurrentPair();
     }

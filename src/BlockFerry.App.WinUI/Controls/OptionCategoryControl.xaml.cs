@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.App.WinUI.Selection;
 using BlockFerry.Core.Options;
 using Microsoft.UI;
@@ -19,6 +20,7 @@ public sealed partial class OptionCategoryControl : UserControl
     private OptionCategoryViewModel? _viewModel;
     private Action<OptionCategoryViewModel>? _toggleCategory;
     private Storyboard? _expansionStoryboard;
+    private bool _settingsBuilt;
 
     public OptionCategoryControl()
     {
@@ -38,6 +40,9 @@ public sealed partial class OptionCategoryControl : UserControl
         ArgumentNullException.ThrowIfNull(toggleCategory);
 
         DetachViewModel();
+        DisclosureButton.IsExpanded = false;
+        ChildrenPanel.Children.Clear();
+        _settingsBuilt = false;
         _viewModel = viewModel;
         _toggleCategory = toggleCategory;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -45,9 +50,9 @@ public sealed partial class OptionCategoryControl : UserControl
         CategoryTitleText.Text = viewModel.Title;
         CategoryIcon.Symbol = viewModel.Symbol;
         AutomationProperties.SetName(CategoryCheckBox, $"选择{viewModel.Title}");
-        BuildSettingControls(viewModel);
         RefreshSelectionPresentation();
         UpdateDisclosurePresentation();
+        QueueHeaderLocalization();
     }
 
     internal void ConfigureAccessibility(bool animationsEnabled, bool highContrast)
@@ -115,16 +120,20 @@ public sealed partial class OptionCategoryControl : UserControl
             return false;
         }
 
+        if (!DisclosureButton.IsExpanded)
+        {
+            DisclosureButton.IsExpanded = true;
+        }
+        else
+        {
+            EnsureSettingControls();
+        }
+
         var setting = _settingControls.FirstOrDefault(
             registration => string.Equals(registration.ViewModel.Key, token.SettingKey, StringComparison.Ordinal));
         if (setting is null)
         {
             return false;
-        }
-
-        if (!DisclosureButton.IsExpanded)
-        {
-            DisclosureButton.IsExpanded = true;
         }
 
         return setting.CheckBox.Focus(FocusState.Programmatic);
@@ -133,6 +142,7 @@ public sealed partial class OptionCategoryControl : UserControl
     private void BuildSettingControls(OptionCategoryViewModel viewModel)
     {
         ChildrenPanel.Children.Clear();
+        _settingsBuilt = true;
 
         foreach (var setting in viewModel.Settings)
         {
@@ -203,6 +213,23 @@ public sealed partial class OptionCategoryControl : UserControl
         }
 
         RefreshSettingThemeResources();
+        UiText.ApplyToVisualTree(ChildrenRegion);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(ChildrenRegion);
+            }
+        });
+    }
+
+    private void EnsureSettingControls()
+    {
+        if (!_settingsBuilt && _viewModel is not null)
+        {
+            BuildSettingControls(_viewModel);
+        }
     }
 
     private void RefreshSettingThemeResources()
@@ -228,6 +255,7 @@ public sealed partial class OptionCategoryControl : UserControl
         }
 
         _settingControls.Clear();
+        _settingsBuilt = false;
     }
 
     private void CategoryCheckBox_Click(object sender, RoutedEventArgs e)
@@ -260,6 +288,9 @@ public sealed partial class OptionCategoryControl : UserControl
         AutomationProperties.SetName(CategoryCheckBox, $"{_viewModel.Title}, {_viewModel.SelectionSummary}");
         var hasSelection = _viewModel.SelectionState != OptionCategorySelectionState.Unselected;
         SelectedSurface.Opacity = hasSelection ? 1 : 0;
+        UiText.ApplyToVisualTree(CategoryTitleText);
+        UiText.ApplyToVisualTree(CategorySummaryText);
+        UiText.ApplyToVisualTree(CategoryCheckBox);
     }
 
     private void DisclosureButton_ExpandedStateChanged(object? sender, EventArgs e)
@@ -275,10 +306,35 @@ public sealed partial class OptionCategoryControl : UserControl
         AutomationProperties.SetName(
             DisclosureButton,
             $"{(DisclosureButton.IsExpanded ? "折叠" : "展开")}{categoryName}");
+        UiText.ApplyToVisualTree(DisclosureButton);
+    }
+
+    private void QueueHeaderLocalization()
+    {
+        UiText.ApplyToVisualTree(CategoryTitleText);
+        UiText.ApplyToVisualTree(CategorySummaryText);
+        UiText.ApplyToVisualTree(CategoryCheckBox);
+        UiText.ApplyToVisualTree(DisclosureButton);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(CategoryTitleText);
+                UiText.ApplyToVisualTree(CategorySummaryText);
+                UiText.ApplyToVisualTree(CategoryCheckBox);
+                UiText.ApplyToVisualTree(DisclosureButton);
+            }
+        });
     }
 
     private void SetChildrenExpanded(bool expanded)
     {
+        if (expanded)
+        {
+            EnsureSettingControls();
+        }
+
         if (!expanded && IsFocusWithinSettings())
         {
             DisclosureButton.Focus(FocusState.Programmatic);

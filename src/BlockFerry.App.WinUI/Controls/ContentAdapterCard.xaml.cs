@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.App.WinUI.Selection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -16,6 +17,7 @@ public sealed partial class ContentAdapterCard : UserControl
     private readonly List<ItemControlRegistration> _itemControls = [];
     private ContentAdapterCardViewModel? _viewModel;
     private Storyboard? _expansionStoryboard;
+    private bool _itemsBuilt;
 
     public ContentAdapterCard()
     {
@@ -28,6 +30,9 @@ public sealed partial class ContentAdapterCard : UserControl
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         DetachViewModel();
+        AdapterDisclosureButton.IsExpanded = false;
+        AdapterItemsPanel.Children.Clear();
+        _itemsBuilt = false;
         _viewModel = viewModel;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         AdapterTitleText.Text = viewModel.Title;
@@ -35,16 +40,20 @@ public sealed partial class ContentAdapterCard : UserControl
         AdapterIcon.Symbol = viewModel.Symbol;
         AdapterCheckBox.IsEnabled = viewModel.IsEnabled;
         AdapterDisabledReasonText.Text = viewModel.DisabledReason;
-        AdapterDisabledReasonText.Visibility = string.IsNullOrEmpty(viewModel.DisabledReason)
+        AdapterDisabledReasonText.Visibility = string.IsNullOrEmpty(viewModel.DisabledReason) ||
+                                               string.Equals(
+                                                   viewModel.DisabledReason,
+                                                   viewModel.SelectionSummary,
+                                                   StringComparison.Ordinal)
             ? Visibility.Collapsed
             : Visibility.Visible;
         EmiUnsupportedStatus.Visibility = viewModel.HasUnsupportedEmiState
             ? Visibility.Visible
             : Visibility.Collapsed;
         EmiUnsupportedText.Text = viewModel.UnsupportedEmiText;
-        BuildItemControls(viewModel);
         RefreshSelectionPresentation();
         UpdateDisclosurePresentation();
+        QueueHeaderLocalization();
     }
 
     internal void ConfigureAccessibility(bool animationsEnabled, bool highContrast)
@@ -66,6 +75,7 @@ public sealed partial class ContentAdapterCard : UserControl
     {
         AdapterItemsPanel.Children.Clear();
         _itemControls.Clear();
+        _itemsBuilt = true;
         foreach (var item in viewModel.Items.Take(MaximumRenderedItems))
         {
             if (item.Conflict is not null)
@@ -95,6 +105,16 @@ public sealed partial class ContentAdapterCard : UserControl
                 TextWrapping = TextWrapping.Wrap,
             });
         }
+
+        UiText.ApplyToVisualTree(AdapterDetailsRegion);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(AdapterDetailsRegion);
+            }
+        });
     }
 
     private CheckBox CreateItemCheckBox(ContentItemSelectionViewModel item)
@@ -189,8 +209,11 @@ public sealed partial class ContentAdapterCard : UserControl
         AdapterSummaryText.Text = _viewModel.SelectionSummary;
         AutomationProperties.SetName(
             AdapterCheckBox,
-            $"{_viewModel.Title}，{_viewModel.SelectionSummary}");
+            $"{_viewModel.Title}, {_viewModel.SelectionSummary}");
         AdapterSelectedSurface.Opacity = _viewModel.IsChecked is true or null ? 1 : 0;
+        UiText.ApplyToVisualTree(AdapterTitleText);
+        UiText.ApplyToVisualTree(AdapterSummaryText);
+        UiText.ApplyToVisualTree(AdapterCheckBox);
     }
 
     private void AdapterDisclosureButton_ExpandedStateChanged(object? sender, EventArgs e)
@@ -205,10 +228,41 @@ public sealed partial class ContentAdapterCard : UserControl
         AutomationProperties.SetName(
             AdapterDisclosureButton,
             $"{(AdapterDisclosureButton.IsExpanded ? "折叠" : "展开")}{_viewModel?.Title ?? "同步内容"}详情");
+        UiText.ApplyToVisualTree(AdapterDisclosureButton);
+    }
+
+    private void QueueHeaderLocalization()
+    {
+        UiText.ApplyToVisualTree(AdapterTitleText);
+        UiText.ApplyToVisualTree(AdapterDescriptionText);
+        UiText.ApplyToVisualTree(AdapterSummaryText);
+        UiText.ApplyToVisualTree(AdapterCheckBox);
+        UiText.ApplyToVisualTree(AdapterDisclosureButton);
+        UiText.ApplyToVisualTree(AdapterDisabledReasonText);
+        UiText.ApplyToVisualTree(EmiUnsupportedText);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(AdapterTitleText);
+                UiText.ApplyToVisualTree(AdapterDescriptionText);
+                UiText.ApplyToVisualTree(AdapterSummaryText);
+                UiText.ApplyToVisualTree(AdapterCheckBox);
+                UiText.ApplyToVisualTree(AdapterDisclosureButton);
+                UiText.ApplyToVisualTree(AdapterDisabledReasonText);
+                UiText.ApplyToVisualTree(EmiUnsupportedText);
+            }
+        });
     }
 
     private void SetDetailsExpanded(bool expanded)
     {
+        if (expanded && !_itemsBuilt && _viewModel is not null)
+        {
+            BuildItemControls(_viewModel);
+        }
+
         if (!expanded && IsFocusWithinDetails())
         {
             AdapterDisclosureButton.Focus(FocusState.Programmatic);
@@ -303,6 +357,7 @@ public sealed partial class ContentAdapterCard : UserControl
         }
 
         _itemControls.Clear();
+        _itemsBuilt = false;
     }
 
     private sealed record ItemControlRegistration(

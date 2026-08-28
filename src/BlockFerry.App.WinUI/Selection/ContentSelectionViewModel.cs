@@ -194,6 +194,8 @@ internal static class ContentCompatibilityText
 internal sealed class ContentSelectionViewModel
 {
     private static readonly string[] AdapterOrder = ["vanilla", "appearance", "jei", "esm"];
+    private bool _bulkChanging;
+    private bool _bulkChanged;
 
     internal ContentSelectionViewModel(
         IEnumerable<ContentCatalog> catalogs,
@@ -247,6 +249,12 @@ internal sealed class ContentSelectionViewModel
         .SelectMany(card => card.Items)
         .Any(item => item.Conflict?.Resolution == ConflictResolution.Unresolved);
 
+    internal bool HasUnselectedSafeItems => Cards
+        .SelectMany(card => card.Items)
+        .Any(item => item.IsSelectable &&
+                     item.Conflict is null &&
+                     !item.IsSelectedForTransfer);
+
     internal event EventHandler? SelectionChanged;
 
     internal ContentSelection CaptureSelection()
@@ -270,6 +278,33 @@ internal sealed class ContentSelectionViewModel
     {
         ArgumentNullException.ThrowIfNull(selectedTechnicalKeys);
         Cards[0].ApplySelectedTechnicalKeys(selectedTechnicalKeys);
+    }
+
+    internal void SelectAllSafeItems()
+    {
+        if (!HasUnselectedSafeItems)
+        {
+            return;
+        }
+
+        _bulkChanging = true;
+        _bulkChanged = false;
+        try
+        {
+            foreach (var card in Cards)
+            {
+                card.SelectAllSafeItems();
+            }
+        }
+        finally
+        {
+            _bulkChanging = false;
+        }
+
+        if (_bulkChanged)
+        {
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private static OptionsSelectionCatalog? CreateVanillaOptionsCatalog(ContentCatalog? catalog)
@@ -325,8 +360,16 @@ internal sealed class ContentSelectionViewModel
         return new OptionsSelectionCatalog(selectable, requiredItems, protectedItems, targetOnly);
     }
 
-    private void Card_SelectionChanged(object? sender, EventArgs e) =>
+    private void Card_SelectionChanged(object? sender, EventArgs e)
+    {
+        if (_bulkChanging)
+        {
+            _bulkChanged = true;
+            return;
+        }
+
         SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 internal sealed class ContentAdapterCardViewModel : INotifyPropertyChanged
@@ -452,6 +495,32 @@ internal sealed class ContentAdapterCardViewModel : INotifyPropertyChanged
             foreach (var item in selectable)
             {
                 item.SetAdapterSelected(selectedTechnicalKeys.Contains(item.Id.TechnicalKey));
+            }
+        }
+        finally
+        {
+            _bulkChanging = false;
+        }
+
+        PublishSelectionChanged();
+    }
+
+    internal void SelectAllSafeItems()
+    {
+        var selectable = Items
+            .Where(item => item.IsSelectable && item.Conflict is null)
+            .ToArray();
+        if (!selectable.Any(item => !item.IsSelectedForTransfer))
+        {
+            return;
+        }
+
+        _bulkChanging = true;
+        try
+        {
+            foreach (var item in selectable)
+            {
+                item.IsSelected = true;
             }
         }
         finally

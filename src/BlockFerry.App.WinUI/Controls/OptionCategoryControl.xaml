@@ -22,11 +22,11 @@
                 Opacity="0" />
             <Border
                 x:Name="CategoryContent"
-                Padding="12">
-                <StackPanel Spacing="8">
+                Padding="16">
+                <StackPanel Spacing="10">
                 <Grid
-                    MinHeight="56"
-                    ColumnSpacing="8">
+                    MinHeight="60"
+                    ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -41,19 +41,19 @@
                         Click="CategoryCheckBox_Click"
                         IsThreeState="True"
                         UseSystemFocusVisuals="True">
-                        <Grid ColumnSpacing="10">
+                        <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border
                                 x:Name="CategoryIconTile"
-                                Width="32"
-                                Height="32"
+                                Width="38"
+                                Height="38"
                                 VerticalAlignment="Center"
                                 AutomationProperties.AccessibilityView="Raw"
                                 Background="{ThemeResource OptionCardIconSurfaceBrush}"
-                                CornerRadius="8"
+                                CornerRadius="11"
                                 IsHitTestVisible="False">
                                 <SymbolIcon
                                     x:Name="CategoryIcon"
@@ -70,7 +70,7 @@
                                 <TextBlock
                                     x:Name="CategoryTitleText"
                                     FontSize="15"
-                                    FontWeight="SemiBold"
+                                    FontWeight="Bold"
                                     Foreground="{ThemeResource DrawerTextBrush}"
                                     TextTrimming="CharacterEllipsis" />
                                 <TextBlock

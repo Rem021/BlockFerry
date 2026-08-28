@@ -1,11 +1,13 @@
 // WinUI presentation for discovery, review, protected migration, recovery, and undo.
 using BlockFerry.App.WinUI.Controls;
 using BlockFerry.App.WinUI.Discovery;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.App.WinUI.Selection;
 using BlockFerry.App.WinUI.Services;
 using BlockFerry.Core.Content;
 using BlockFerry.Core.Options;
 using BlockFerry.Core.Pcl2;
+using BlockFerry.Core.Transactions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
@@ -21,6 +23,7 @@ namespace BlockFerry.App.WinUI;
 
 public sealed partial class MainPage : Page, IDisposable
 {
+    private const double WorkspaceTransitionOffset = 28;
     internal event EventHandler<DrawerModalPhaseChangedEventArgs>? DrawerModalPhaseChanged;
     private Pcl2OptionsMigrationPreviewer? _previewer;
     private readonly OperationGenerationCounter _operationGenerations = new();
@@ -45,15 +48,23 @@ public sealed partial class MainPage : Page, IDisposable
     private bool _updatingPickers;
     private bool _drawerTransitioning;
     private bool _drawerClosing;
+    private bool _openDrawerForWorkflowAttentionAfterClose;
     private bool _refreshOptionsOnLoad;
     private Control? _focusBeforeDrawer;
     private Control? _drawerInitialFocus;
     private Storyboard? _drawerTransition;
+    private Storyboard? _syncProgressStoryboard;
+    private Storyboard? _executionProgressStoryboard;
+    private readonly MigrationProgressAccumulator _syncProgressAccumulator = new();
+    private readonly MigrationProgressAccumulator _executionProgressAccumulator = new();
     private long _drawerTransitionGeneration;
     private SyncPresentationState? _lastPresentationState;
     private int _lastPresentationStep = -1;
     private string? _lastPresentationDetail;
     private int _lastPlannedChangeCount;
+    private long _appliedLanguageRevision = -1;
+    private long _queuedLanguageRevision = -1;
+    private bool _fullLocalizationQueued;
     private bool _discoveryInFlight;
     private bool _disposed;
 
@@ -61,6 +72,140 @@ public sealed partial class MainPage : Page, IDisposable
     {
         InitializeComponent();
         ApplyViewState(MigrationViewState.AwaitingDiscovery);
+    }
+
+    internal void ApplyLanguage()
+    {
+        // A language change is presentation-only. Re-projecting the workflow here used to
+        // collapse an already-reviewed demo back to the selection stage and left the footer
+        // describing the old stage. Refresh only the labels that are not visual-tree copy,
+        // then translate the currently presented workspace in place.
+        if (_discoveredInstances.Count > 0)
+        {
+            var sourceIndex = SourceInstancePicker.SelectedIndex;
+            var targetIndex = TargetInstancePicker.SelectedIndex;
+            _updatingPickers = true;
+            var labels = _discoveredInstances.Select(InstanceLabel).ToArray();
+            SourceInstancePicker.ItemsSource = labels;
+            TargetInstancePicker.ItemsSource = labels;
+            SourceInstancePicker.SelectedIndex = sourceIndex;
+            TargetInstancePicker.SelectedIndex = targetIndex;
+            _updatingPickers = false;
+        }
+
+        QueueLocalization();
+        QueueSubtreeLocalization(SceneLayer);
+        QueueSubtreeLocalization(SceneHeaderPanel);
+        QueueSubtreeLocalization(SceneTaglineText);
+        if (DrawerLayer.Visibility == Visibility.Visible)
+        {
+            QueueSubtreeLocalization(DrawerPanel);
+            QueueSubtreeLocalization(DrawerHeaderPanel);
+            QueueSubtreeLocalization(WorkspaceGuideColumn);
+            QueueSubtreeLocalization(WorkspaceStageColumn);
+            QueueSubtreeLocalization(ResultCard);
+            QueueSubtreeLocalization(ExecutionExperience);
+            QueueSubtreeLocalization(DrawerFooterGrid);
+        }
+
+        QueuePrefixLocalization();
+        ProjectPersistentLanguageCopy();
+    }
+
+    private void QueueLocalization()
+    {
+        var revision = UiText.Revision;
+        if (_appliedLanguageRevision == revision && !_fullLocalizationQueued)
+        {
+            return;
+        }
+
+        UiText.ApplyToVisualTree(PageRoot);
+        _appliedLanguageRevision = revision;
+        _queuedLanguageRevision = revision;
+        if (_fullLocalizationQueued)
+        {
+            return;
+        }
+
+        _fullLocalizationQueued = true;
+        if (DispatcherQueue?.TryEnqueue(() =>
+        {
+            _fullLocalizationQueued = false;
+            var queuedRevision = _queuedLanguageRevision;
+            if (!_disposed && queuedRevision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(PageRoot);
+                _appliedLanguageRevision = queuedRevision;
+            }
+        }) != true)
+        {
+            _fullLocalizationQueued = false;
+        }
+    }
+
+    private static void LocalizeElements(params DependencyObject[] elements)
+    {
+        foreach (var element in elements)
+        {
+            UiText.ApplyToVisualTree(element);
+        }
+    }
+
+    private void QueueSubtreeLocalization(DependencyObject root)
+    {
+        UiText.ApplyToVisualTree(root);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (!_disposed && revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(root);
+            }
+        });
+    }
+
+    private void QueuePrefixLocalization()
+    {
+        var revision = UiText.Revision;
+        SourcePrefixRun.Text = UiText.Current == UiLanguage.English ? "From " : "从 ";
+        TargetPrefixRun.Text = UiText.Current == UiLanguage.English ? "To " : "到 ";
+        SourceVersionRun.Text = UiText.Translate(_viewState.SourceVersion);
+        TargetVersionRun.Text = UiText.Translate(_viewState.TargetVersion);
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (!_disposed && revision == UiText.Revision)
+            {
+                SourcePrefixRun.Text = UiText.Current == UiLanguage.English ? "From " : "从 ";
+                TargetPrefixRun.Text = UiText.Current == UiLanguage.English ? "To " : "到 ";
+                SourceVersionRun.Text = UiText.Translate(_viewState.SourceVersion);
+                TargetVersionRun.Text = UiText.Translate(_viewState.TargetVersion);
+            }
+        });
+    }
+
+    private void ProjectPersistentLanguageCopy()
+    {
+        void Apply()
+        {
+            SceneHeaderTitleText.Text = UiText.Translate("迁移设置");
+            SceneTaglineText.Text = UiText.Translate("个人设置去往新版本");
+            DrawerEyebrowText.Text = UiText.Translate("BLOCKFERRY · 安全迁移");
+            DrawerWorkspaceTitleText.Text = UiText.Translate("迁移工作区");
+            WorkspaceSelectStepText.Text = UiText.Translate("选择内容");
+            WorkspaceReviewStepText.Text = UiText.Translate("审核清单");
+            WorkspaceExecuteStepText.Text = UiText.Translate("执行与验证");
+        }
+
+        Apply();
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (!_disposed && revision == UiText.Revision)
+            {
+                Apply();
+            }
+        });
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -104,6 +249,10 @@ public sealed partial class MainPage : Page, IDisposable
 
         CancelRequest(ref _catalogCancellation);
         CancelRequest(ref _previewCancellation);
+        _syncProgressStoryboard?.Stop();
+        _syncProgressStoryboard = null;
+        _executionProgressStoryboard?.Stop();
+        _executionProgressStoryboard = null;
         _discoveryViewModel?.Dispose();
         _discoveryViewModel = null;
         _previewer = null;
@@ -136,6 +285,9 @@ public sealed partial class MainPage : Page, IDisposable
             : Visibility.Collapsed;
         ErrorCard.Visibility = Visibility.Collapsed;
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         PrimaryActionButton.IsEnabled = state.CanStart;
         SetSyncPresentation(SyncPresentationState.Idle, 0, null);
         RepositionDecorativeNumber(PageRoot.ActualWidth, PageRoot.ActualHeight);
@@ -163,10 +315,18 @@ public sealed partial class MainPage : Page, IDisposable
             drawerAcrylic.AlwaysUseFallback = !advancedEffectsEnabled || highContrast;
         }
 
-        if (!animationsEnabled)
+        if (!animationsEnabled || highContrast)
         {
+            _syncProgressStoryboard?.Stop();
+            _executionProgressStoryboard?.Stop();
             StatusProgressRing.IsActive = false;
-            PrimaryProgressRing.IsActive = false;
+            DiscoveryProgressRing.IsActive = false;
+            DrawerActivityRing.IsActive = false;
+            ExecutionActivityRing.IsActive = false;
+            DiscoveryProgressBar.IsIndeterminate = false;
+            DrawerProgressBar.IsIndeterminate = false;
+            ExecutionProgressBar.IsIndeterminate = false;
+            SyncProgressBar.IsIndeterminate = false;
         }
 
         if (highContrast)
@@ -179,15 +339,25 @@ public sealed partial class MainPage : Page, IDisposable
     public void SetSyncPresentation(
         SyncPresentationState state,
         int stepIndex,
-        string? detail)
+        string? detail,
+        MigrationProgress? progress = null)
     {
+        if (_lastPresentationState != state)
+        {
+            _syncProgressAccumulator.Reset();
+        }
+
         var clampedStep = Math.Clamp(stepIndex, 0, 3);
         var presentationChanged = _lastPresentationState != state ||
                                   _lastPresentationStep != clampedStep ||
+                                  state != SyncPresentationState.Running &&
                                   !string.Equals(_lastPresentationDetail, detail, StringComparison.Ordinal);
         var isRunning = state == SyncPresentationState.Running;
         var isCompleted = state == SyncPresentationState.Completed;
         var isBlocked = state == SyncPresentationState.Blocked;
+        var running = MigrationProgressPresenter.Create(
+            progress,
+            detail ?? "正在执行受保护操作");
 
         StatusIconHost.Visibility = state == SyncPresentationState.Idle
             ? Visibility.Collapsed
@@ -196,15 +366,19 @@ public sealed partial class MainPage : Page, IDisposable
         StatusCheckIcon.Visibility = isCompleted ? Visibility.Visible : Visibility.Collapsed;
         StatusWarningIcon.Visibility = isBlocked ? Visibility.Visible : Visibility.Collapsed;
         SyncProgressBar.Visibility = isRunning ? Visibility.Visible : Visibility.Collapsed;
+        PrimaryActionButton.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
 
         PrimaryIdleContent.Visibility = state is SyncPresentationState.Idle or SyncPresentationState.Blocked
             ? Visibility.Visible
             : Visibility.Collapsed;
-        PrimaryRunningContent.Visibility = isRunning ? Visibility.Visible : Visibility.Collapsed;
         PrimaryDoneContent.Visibility = isCompleted ? Visibility.Visible : Visibility.Collapsed;
 
-        StatusProgressRing.IsActive = isRunning && _animationsEnabled;
-        PrimaryProgressRing.IsActive = isRunning && _animationsEnabled;
+        var continuousMotion = ContinuousMotionPolicy.Allows(
+            isRunning,
+            _animationsEnabled,
+            _highContrast);
+        StatusProgressRing.IsActive = continuousMotion;
+        SyncProgressBar.IsIndeterminate = continuousMotion && running.IsIndeterminate;
 
         switch (state)
         {
@@ -213,32 +387,35 @@ public sealed partial class MainPage : Page, IDisposable
                 StatusSubtitleText.Text = _viewState.IsDemo
                     ? "演示数据 · 只读预览 · 0 写入"
                     : "真实实例 · 选择内容后会显示最终清单";
-                SyncProgressBar.Value = 0;
+                SetSyncProgressValue(0);
                 PrimaryActionButton.IsEnabled = _viewState.CanStart;
                 PrimaryDoneText.Text = _viewState.IsDemo ? "演示完成" : "同步完成";
                 break;
 
             case SyncPresentationState.Running:
-                StatusTitleText.Text = _viewState.IsDemo
-                    ? "正在生成演示预览"
-                    : "正在安全处理同步";
-                StatusSubtitleText.Text = detail ?? "正在执行受保护操作";
-                SyncProgressBar.Value = 42;
+                StatusTitleText.Text = progress is null
+                    ? _viewState.IsDemo ? "正在生成演示预览" : "正在安全处理同步"
+                    : running.StageText;
+                StatusSubtitleText.Text = running.DetailText;
+                SetSyncProgressValue(running.Percent);
                 PrimaryActionButton.IsEnabled = false;
                 break;
 
             case SyncPresentationState.Completed:
                 StatusTitleText.Text = _viewState.IsDemo ? "演示预览完成" : "同步已验证";
                 StatusSubtitleText.Text = detail ?? "目标文件已经复读验证";
-                SyncProgressBar.Value = 100;
-                PrimaryDoneText.Text = _viewState.IsDemo ? "演示完成" : "同步完成";
-                PrimaryActionButton.IsEnabled = false;
+                SetSyncProgressValue(100);
+                PrimaryDoneText.Text = _viewState.IsDemo ? "查看演示结果" : "查看同步结果";
+                PrimaryActionButton.IsEnabled = true;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    PrimaryActionButton,
+                    PrimaryDoneText.Text);
                 break;
 
             case SyncPresentationState.Blocked:
                 StatusTitleText.Text = "操作被阻止";
                 StatusSubtitleText.Text = detail ?? "请在同步设置中查看安全提示";
-                SyncProgressBar.Value = 0;
+                SetSyncProgressValue(0);
                 PrimaryActionButton.IsEnabled = _viewState.CanStart;
                 break;
         }
@@ -246,7 +423,12 @@ public sealed partial class MainPage : Page, IDisposable
         _lastPresentationState = state;
         _lastPresentationStep = clampedStep;
         _lastPresentationDetail = detail;
-        UpdateDrawerFooterPresentation();
+        if (_workflow is null || _workflow.State.Phase == MigrationWorkflowPhase.Demo)
+        {
+            UpdateDrawerFooterPresentation();
+        }
+
+        LocalizeElements(StatusArea, PrimaryContentHost);
 
         if (presentationChanged)
         {
@@ -255,12 +437,68 @@ public sealed partial class MainPage : Page, IDisposable
         }
     }
 
+    private void SetSyncProgressValue(double value)
+    {
+        value = _workflow?.State.IsMutationInProgress == true
+            ? _executionProgressAccumulator.Current
+            : _syncProgressAccumulator.Advance(value);
+        var currentValue = SyncProgressBar.Value;
+        _syncProgressStoryboard?.Stop();
+        if (!_animationsEnabled || Math.Abs(currentValue - value) < 0.1)
+        {
+            SyncProgressBar.Value = value;
+            return;
+        }
+
+        SyncProgressBar.Value = value;
+        var animation = new DoubleAnimation
+        {
+            From = currentValue,
+            To = value,
+            Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+            FillBehavior = FillBehavior.Stop,
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, SyncProgressBar);
+        Storyboard.SetTargetProperty(animation, "Value");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        _syncProgressStoryboard = storyboard;
+        storyboard.Begin();
+    }
+
+    private void SetDiscoveryActivity(bool active)
+    {
+        var continuousMotion = ContinuousMotionPolicy.Allows(
+            active,
+            _animationsEnabled,
+            _highContrast);
+        DiscoveryProgressPanel.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        DiscoveryProgressRing.IsActive = continuousMotion;
+        DiscoveryProgressBar.IsIndeterminate = continuousMotion;
+    }
+
+    private void SetDrawerActivity(bool active, bool indeterminate, double percent = 0)
+    {
+        var continuousMotion = ContinuousMotionPolicy.Allows(
+            active,
+            _animationsEnabled,
+            _highContrast);
+        DrawerActivityRing.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        DrawerActivityRing.IsActive = continuousMotion;
+        DrawerProgressBar.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        DrawerProgressBar.IsIndeterminate = continuousMotion && indeterminate;
+        if (active && !indeterminate)
+        {
+            DrawerProgressBar.Value = Math.Clamp(percent, 0, 100);
+        }
+    }
+
     private void ProjectViewState(MigrationViewState state)
     {
         ModeLabelText.Text = state.ModeLabel;
         DrawerHeaderStatusText.Text = MigrationViewCopy.DrawerHeaderStatus(state);
-        SourceVersionRun.Text = state.SourceVersion;
-        TargetVersionRun.Text = state.TargetVersion;
+        QueuePrefixLocalization();
         GiantVersionText.Text = DecorativeVersion(state.TargetVersion);
         PackNameText.Text = state.PackName;
         HeaderContextText.Text = $"{CompactPackName(state.PackName)} · {state.LauncherName}";
@@ -268,10 +506,18 @@ public sealed partial class MainPage : Page, IDisposable
         SafetyBoundaryText.Text = state.IsDemo
             ? "当前是 UI 状态演示。未读取真实实例、未创建还原点、未迁移设置，也不会显示完成 Toast。"
             : "发现与选择阶段只读；最终清单确认后才会先备份、再同步并复读验证。";
-
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
             PrimaryActionButton,
             "打开同步设置选择");
+        LocalizeElements(
+            ModeLabelText,
+            DrawerHeaderStatusText,
+            GiantVersionText,
+            PackNameText,
+            HeaderContextText,
+            PrimaryIdleText,
+            SafetyBoundaryText,
+            PrimaryActionButton);
     }
 
     private void Page_Loaded(object sender, RoutedEventArgs e)
@@ -301,6 +547,8 @@ public sealed partial class MainPage : Page, IDisposable
         {
             UpdateGenerateButtonState();
         }
+
+        RetryCommittedHomeFeedbackFromCurrentState();
     }
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
@@ -323,6 +571,9 @@ public sealed partial class MainPage : Page, IDisposable
         if (recovery.ReturnToSelection)
         {
             ResultCard.Visibility = Visibility.Collapsed;
+            ExecutionExperience.Visibility = Visibility.Collapsed;
+            WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+            UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
             ErrorCard.Visibility = Visibility.Collapsed;
             OptionsSelectionPanel.Visibility = Visibility.Visible;
             OptionsSelectionControl.IsEnabled = recovery.SelectionEnabled;
@@ -338,9 +589,8 @@ public sealed partial class MainPage : Page, IDisposable
             Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height),
         };
 
-        DrawerPanel.Width = e.NewSize.Width <= 620
-            ? e.NewSize.Width
-            : Math.Min(420, e.NewSize.Width);
+        DrawerPanel.Width = e.NewSize.Width;
+        DrawerBodyPanel.Width = Math.Min(1040, e.NewSize.Width);
         RepositionDecorativeNumber(e.NewSize.Width, e.NewSize.Height);
     }
 
@@ -380,13 +630,20 @@ public sealed partial class MainPage : Page, IDisposable
 
     private void ModifySelectionButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_workflow is not null && _workflow.State.Phase == MigrationWorkflowPhase.Reviewing)
+        if (_workflow is not null &&
+            MigrationWorkflowPolicy.CanReturnToSelection(
+                _workflow.State.Phase,
+                _workflow.State.Catalogs.Count > 0,
+                _workflow.State.IsMutationInProgress))
         {
             _workflow.InvalidatePlan();
             return;
         }
 
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         ErrorCard.Visibility = Visibility.Collapsed;
         OptionsSelectionPanel.Visibility = Visibility.Visible;
         SetSyncPresentation(SyncPresentationState.Idle, 0, null);
@@ -437,11 +694,26 @@ public sealed partial class MainPage : Page, IDisposable
         UpdateGenerateButtonState();
     }
 
+    private void OptionsSelectionControl_SelectAllRequested(object sender, EventArgs e)
+    {
+        OptionsSelectionControl.SelectAll();
+        if (_workflow is null || _workflow.State.Phase == MigrationWorkflowPhase.Demo)
+        {
+            return;
+        }
+
+        _contentSelectionViewModel.SelectAllSafeItems();
+        OptionsSelectionControl.SetSelectAllEnabled(
+            _contentSelectionViewModel.HasUnselectedSafeItems);
+    }
+
     private void ContentSelectionViewModel_SelectionChanged(object? sender, EventArgs e)
     {
         _workflow?.InvalidatePlan();
         if (_workflow is not null && _workflow.State.Phase != MigrationWorkflowPhase.Demo)
         {
+            OptionsSelectionControl.SetSelectAllEnabled(
+                _contentSelectionViewModel.HasUnselectedSafeItems);
             UpdateWorkflowFooter(_workflow.State);
             return;
         }
@@ -461,6 +733,9 @@ public sealed partial class MainPage : Page, IDisposable
         CancelRequest(ref _previewCancellation);
         _previewInFlight = false;
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         if (_lastPresentationState == SyncPresentationState.Completed)
         {
             SetSyncPresentation(SyncPresentationState.Idle, 0, null);
@@ -534,7 +809,9 @@ public sealed partial class MainPage : Page, IDisposable
 
         _discoveryInFlight = true;
         SetDiscoveryButtonsEnabled(false);
+        SetDiscoveryActivity(true);
         ScanStatusText.Text = pendingText;
+        LocalizeElements(ScanStatusText);
         PlayReveal(ScanStatusText, ScanStatusTranslate, 160, 4);
         try
         {
@@ -551,6 +828,7 @@ public sealed partial class MainPage : Page, IDisposable
         finally
         {
             _discoveryInFlight = false;
+            SetDiscoveryActivity(false);
             if (!_disposed)
             {
                 SetDiscoveryButtonsEnabled(true);
@@ -568,6 +846,7 @@ public sealed partial class MainPage : Page, IDisposable
         }
 
         ScanStatusText.Text = viewModel.StatusText;
+        LocalizeElements(ScanStatusText);
         var acceptedSession = viewModel.ActiveSession;
         if (acceptedSession is null)
         {
@@ -607,6 +886,9 @@ public sealed partial class MainPage : Page, IDisposable
 
         ErrorCard.Visibility = Visibility.Collapsed;
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         SetSyncPresentation(SyncPresentationState.Idle, 0, null);
         AnimateProjectionChange();
         PlayReveal(ScanStatusText, ScanStatusTranslate, 160, 4);
@@ -738,8 +1020,12 @@ public sealed partial class MainPage : Page, IDisposable
         OptionsSelectionControl.Clear();
         OptionsSelectionPanel.Visibility = Visibility.Visible;
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         ErrorCard.Visibility = Visibility.Collapsed;
         UpdateGenerateButtonState();
+        SetDrawerActivity(active: true, indeterminate: true);
 
         try
         {
@@ -797,8 +1083,12 @@ public sealed partial class MainPage : Page, IDisposable
             _selectionSession = nextSession;
             _selectionCatalog = catalog;
             OptionsSelectionControl.LoadCatalog(catalog);
+            QueueSubtreeLocalization(OptionsSelectionControl);
             OptionsSelectionPanel.Visibility = Visibility.Visible;
             ResultCard.Visibility = Visibility.Collapsed;
+            ExecutionExperience.Visibility = Visibility.Collapsed;
+            WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+            UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
             ErrorCard.Visibility = Visibility.Collapsed;
             SetSyncPresentation(SyncPresentationState.Idle, 0, null);
         }
@@ -881,6 +1171,7 @@ public sealed partial class MainPage : Page, IDisposable
         }
 
         SetSyncPresentation(SyncPresentationState.Running, 0, "正在生成当前选择的只读预览 · 0 写入");
+        SetDrawerActivity(active: true, indeterminate: true);
         UpdateGenerateButtonState();
 
         try
@@ -975,6 +1266,7 @@ public sealed partial class MainPage : Page, IDisposable
 
     private void PresentSelectedPreview(Pcl2SelectedOptionsPreview preview)
     {
+        PreviewResultTitleText.Text = "确认同步清单";
         MigrationReviewControl.BindPreview(preview.PlannedChanges
             .Select(OptionsPreviewResultFormatter.FormatDifference));
         PreviewSummaryText.Text =
@@ -989,6 +1281,11 @@ public sealed partial class MainPage : Page, IDisposable
         ErrorCard.Visibility = Visibility.Collapsed;
         OptionsSelectionPanel.Visibility = Visibility.Collapsed;
         ResultCard.Visibility = Visibility.Visible;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Collapsed;
+        LocalizeElements(PreviewResultTitleText);
+        QueueSubtreeLocalization(ResultCard);
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Reviewing);
         PreviewResultHeading.Focus(FocusState.Programmatic);
 
         var peer = FrameworkElementAutomationPeer.FromElement(PreviewResultHeading) ??
@@ -996,7 +1293,7 @@ public sealed partial class MainPage : Page, IDisposable
         peer?.RaiseNotificationEvent(
             AutomationNotificationKind.ActionCompleted,
             AutomationNotificationProcessing.MostRecent,
-            $"只读预览已完成，计划同步 {preview.PlannedChanges.Count} 项设置。",
+            UiText.Translate($"只读预览已完成，计划同步 {preview.PlannedChanges.Count} 项设置。"),
             "BlockFerry.OptionsPreview.Completed");
 
         SetSyncPresentation(
@@ -1009,6 +1306,9 @@ public sealed partial class MainPage : Page, IDisposable
     private void ShowSelectionError(string message, string[] diagnostics)
     {
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         OptionsSelectionPanel.Visibility = Visibility.Visible;
         SelectionErrorText.Text = message;
         SelectionErrorDiagnosticsItemsControl.ItemsSource = diagnostics;
@@ -1016,6 +1316,7 @@ public sealed partial class MainPage : Page, IDisposable
             ? Visibility.Collapsed
             : Visibility.Visible;
         ErrorCard.Visibility = Visibility.Visible;
+        QueueSubtreeLocalization(ErrorCard);
         SetSyncPresentation(SyncPresentationState.Blocked, 0, $"{message} · 0 写入");
     }
 
@@ -1034,6 +1335,9 @@ public sealed partial class MainPage : Page, IDisposable
         OptionsSelectionPanel.Visibility = Visibility.Visible;
         OptionsSelectionControl.IsEnabled = true;
         ResultCard.Visibility = Visibility.Collapsed;
+        ExecutionExperience.Visibility = Visibility.Collapsed;
+        WorkspaceSelectionLayout.Visibility = Visibility.Visible;
+        UpdateWorkspaceStageRail(MigrationWorkflowPhase.Selecting);
         ErrorCard.Visibility = Visibility.Collapsed;
         _presentedReviewItems = null;
         MigrationReviewControl.Clear();
@@ -1072,6 +1376,14 @@ public sealed partial class MainPage : Page, IDisposable
             _contentAdapterCards.Add(card);
             ContentAdapterCardsPanel.Children.Add(card);
         }
+
+        if (_workflow is not null && _workflow.State.Phase != MigrationWorkflowPhase.Demo)
+        {
+            OptionsSelectionControl.SetSelectAllEnabled(
+                _contentSelectionViewModel.HasUnselectedSafeItems);
+        }
+
+        QueueSubtreeLocalization(ContentSelectionSection);
     }
 
     private static void CancelRequest(ref CancellationTokenSource? cancellation)
@@ -1112,6 +1424,10 @@ public sealed partial class MainPage : Page, IDisposable
             _selectionCatalog is not null &&
             selectedCount > 0 &&
             hasSession;
+        var activityRunning = _catalogInFlight ||
+                              _previewInFlight ||
+                              _lastPresentationState == SyncPresentationState.Running;
+        SetDrawerActivity(activityRunning, indeterminate: true);
 
         string footerText;
         string buttonContent;
@@ -1158,6 +1474,7 @@ public sealed partial class MainPage : Page, IDisposable
         SelectedCountFooterText.Text = footerText;
         DryRunPreviewButton.Content = buttonContent;
         DryRunPreviewButton.IsEnabled = buttonEnabled;
+        LocalizeElements(SelectedCountFooterText, DryRunPreviewButton);
     }
 
     private bool IsCurrentPair(Pcl2Instance source, Pcl2Instance target) =>
@@ -1174,10 +1491,13 @@ public sealed partial class MainPage : Page, IDisposable
 
     private static string InstanceLabel(Pcl2Instance instance)
     {
-        var minecraft = instance.MinecraftVersion ?? "MC 未知";
+        var minecraft = instance.MinecraftVersion ??
+            (UiText.Current == UiLanguage.English ? "MC unknown" : "MC 未知");
         var packVersion = instance.ModpackIdentity.Version;
         var version = string.IsNullOrWhiteSpace(packVersion) ? minecraft : $"{packVersion} · MC {minecraft}";
-        var isolation = instance.Isolation == Pcl2IsolationMode.Isolated ? "独立" : "需诊断";
+        var isolation = instance.Isolation == Pcl2IsolationMode.Isolated
+            ? UiText.Translate("独立")
+            : UiText.Translate("需诊断");
         return $"{instance.DisplayName} · {version} · {isolation}";
     }
 
@@ -1216,9 +1536,12 @@ public sealed partial class MainPage : Page, IDisposable
         _drawerTransitionGeneration = generation;
         RaiseDrawerModalPhaseChanged();
         DrawerLayer.Visibility = Visibility.Visible;
-        DrawerPanel.Width = PageRoot.ActualWidth <= 620
-            ? PageRoot.ActualWidth
-            : Math.Min(420, PageRoot.ActualWidth);
+        DrawerPanel.Width = PageRoot.ActualWidth;
+        QueueSubtreeLocalization(DrawerPanel);
+        QueueSubtreeLocalization(DrawerHeaderPanel);
+        QueueSubtreeLocalization(WorkspaceGuideColumn);
+        QueueSubtreeLocalization(WorkspaceStageColumn);
+        QueueSubtreeLocalization(DrawerFooterGrid);
         EnsureDrawerFocusWithin();
 
         if (_selectionCatalog is null && !_catalogInFlight && _viewState.CanStart)
@@ -1236,14 +1559,14 @@ public sealed partial class MainPage : Page, IDisposable
         _drawerClosing = false;
         DrawerPanel.IsHitTestVisible = false;
         DrawerScrim.IsHitTestVisible = true;
-        DrawerTranslate.X = _animationsEnabled ? DrawerPanel.Width : 0;
+        DrawerTranslate.X = _animationsEnabled ? WorkspaceTransitionOffset : 0;
         DrawerScrim.Opacity = 0;
-        DrawerPanel.Opacity = _animationsEnabled ? 0.86 : 0;
+        DrawerPanel.Opacity = _animationsEnabled ? 0.94 : 0;
         var storyboard = CreateDrawerStoryboard(
             drawerTarget: 0,
-            scrimTarget: 1,
+            scrimTarget: 0,
             panelOpacityTarget: 1,
-            duration: TimeSpan.FromMilliseconds(_animationsEnabled ? 260 : 120),
+            duration: TimeSpan.FromMilliseconds(_animationsEnabled ? 240 : 120),
             animatePosition: _animationsEnabled);
         _drawerTransition = storyboard;
         storyboard.Completed += (_, _) => CompleteDrawerOpen(storyboard, generation);
@@ -1270,7 +1593,41 @@ public sealed partial class MainPage : Page, IDisposable
             return;
         }
 
-        var generation = closeRequest.Generation;
+        BeginDrawerClose(closeRequest.Generation);
+    }
+
+    private void CloseDrawerForBackgroundExecution()
+    {
+        if (_drawerTransitioning || _workflow?.State.IsMutationInProgress != true)
+        {
+            return;
+        }
+
+        var closeRequest = _drawerLifecycle.RequestClose(isMutationInProgress: false);
+        if (closeRequest.Outcome == DrawerCloseRequestOutcome.Closing)
+        {
+            BeginDrawerClose(closeRequest.Generation);
+        }
+    }
+
+    private void OpenDrawerForWorkflowAttention()
+    {
+        if (_disposed || _drawerLifecycle.Phase is DrawerModalPhase.Open or DrawerModalPhase.Opening)
+        {
+            return;
+        }
+
+        if (_drawerLifecycle.Phase == DrawerModalPhase.Closing)
+        {
+            _openDrawerForWorkflowAttentionAfterClose = true;
+            return;
+        }
+
+        OpenDrawer(DrawerCloseButton);
+    }
+
+    private void BeginDrawerClose(long generation)
+    {
         _drawerTransitionGeneration = generation;
         RaiseDrawerModalPhaseChanged();
         EnsureDrawerFocusWithin();
@@ -1285,10 +1642,10 @@ public sealed partial class MainPage : Page, IDisposable
         DrawerPanel.IsHitTestVisible = false;
         DrawerScrim.IsHitTestVisible = true;
         var storyboard = CreateDrawerStoryboard(
-            drawerTarget: _animationsEnabled ? DrawerPanel.Width : 0,
+            drawerTarget: _animationsEnabled ? WorkspaceTransitionOffset : 0,
             scrimTarget: 0,
-            panelOpacityTarget: _animationsEnabled ? 0.86 : 0,
-            duration: TimeSpan.FromMilliseconds(_animationsEnabled ? 160 : 120),
+            panelOpacityTarget: 0,
+            duration: TimeSpan.FromMilliseconds(_animationsEnabled ? 190 : 120),
             animatePosition: _animationsEnabled);
         _drawerTransition = storyboard;
         storyboard.Completed += (_, _) => CompleteDrawerClose(storyboard, generation);
@@ -1371,10 +1728,13 @@ public sealed partial class MainPage : Page, IDisposable
         _drawerTransitioning = false;
         _drawerClosing = false;
         DrawerTranslate.X = 0;
-        DrawerScrim.Opacity = 1;
+        DrawerScrim.Opacity = 0;
         DrawerPanel.Opacity = 1;
         DrawerPanel.IsHitTestVisible = true;
         DrawerScrim.IsHitTestVisible = true;
+        QueueSubtreeLocalization(DrawerPanel);
+        QueueSubtreeLocalization(WorkspaceStageColumn);
+        QueueSubtreeLocalization(DrawerFooterGrid);
         EnsureDrawerFocusWithin();
         RaiseDrawerModalPhaseChanged();
     }
@@ -1441,6 +1801,16 @@ public sealed partial class MainPage : Page, IDisposable
         _focusBeforeDrawer = null;
         _drawerInitialFocus = null;
         RaiseDrawerModalPhaseChanged();
+        RetryCommittedHomeFeedbackFromCurrentState();
+        var shouldOpenForAttention = _openDrawerForWorkflowAttentionAfterClose &&
+                                     _workflow?.State.Phase is
+                                         MigrationWorkflowPhase.Blocked or
+                                         MigrationWorkflowPhase.RecoveryRequired;
+        _openDrawerForWorkflowAttentionAfterClose = false;
+        if (shouldOpenForAttention)
+        {
+            OpenDrawer(DrawerCloseButton);
+        }
     }
 
     private void CompleteActiveDrawerTransition()
@@ -1473,6 +1843,7 @@ public sealed partial class MainPage : Page, IDisposable
 
         _drawerTransitioning = false;
         _drawerClosing = false;
+        _openDrawerForWorkflowAttentionAfterClose = false;
         DrawerLayer.Visibility = Visibility.Collapsed;
         DrawerTranslate.X = 0;
         DrawerScrim.Opacity = 0;

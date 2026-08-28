@@ -199,7 +199,13 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <FontFamily x:Key="DisplayFontFamily">Segoe UI Variable Display, Microsoft YaHei UI</FontFamily>
+            <!-- Noto Sans SC is bundled under SIL OFL 1.1 and covers both Chinese and Latin UI. -->
+            <FontFamily x:Key="AppFontFamily">ms-appx:///Assets/Fonts/NotoSansSC-Variable.ttf#Noto Sans SC</FontFamily>
+            <FontFamily x:Key="DisplayFontFamily">ms-appx:///Assets/Fonts/NotoSansSC-Variable.ttf#Noto Sans SC</FontFamily>
+
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+            </Style>
 
             <Style x:Key="ChromeIconButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="44" />
@@ -216,15 +222,16 @@
                    BasedOn="{StaticResource ChromeIconButtonStyle}"
                    TargetType="Button">
                 <Setter Property="Width" Value="46" />
-                <Setter Property="Height" Value="32" />
+                <Setter Property="Height" Value="48" />
                 <Setter Property="MinWidth" Value="46" />
-                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="MinHeight" Value="48" />
                 <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="Transparent" />
             </Style>
 
             <Style x:Key="QuietButtonStyle" TargetType="Button">
+                <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
                 <Setter Property="MinHeight" Value="44" />
                 <Setter Property="Padding" Value="8,0" />
                 <Setter Property="CornerRadius" Value="10" />

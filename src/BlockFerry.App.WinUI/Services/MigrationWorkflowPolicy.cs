@@ -27,6 +27,26 @@ internal static class MigrationWorkflowPolicy
         currentOperation == callbackOperation &&
         phase is MigrationWorkflowPhase.Executing or MigrationWorkflowPhase.RollingBack;
 
+    internal static bool CanReturnToSelection(
+        MigrationWorkflowPhase phase,
+        bool hasCatalogs,
+        bool isMutationInProgress) =>
+        !isMutationInProgress &&
+        (phase == MigrationWorkflowPhase.Reviewing ||
+         phase == MigrationWorkflowPhase.Blocked && hasCatalogs);
+
+    internal static bool CanStartAnotherSync(
+        MigrationWorkflowPhase phase,
+        MigrationExecutionStatus? lastExecutionStatus,
+        bool hasDeferredJeiSync,
+        bool isMutationInProgress,
+        bool hasPair) =>
+        phase == MigrationWorkflowPhase.Succeeded &&
+        lastExecutionStatus == MigrationExecutionStatus.Succeeded &&
+        !hasDeferredJeiSync &&
+        !isMutationInProgress &&
+        hasPair;
+
     internal static bool CanRecover(
         MigrationRecoveryStatus? attentionStatus,
         bool targetPathAvailable,

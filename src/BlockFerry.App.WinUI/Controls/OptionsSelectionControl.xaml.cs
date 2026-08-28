@@ -1,4 +1,5 @@
 using BlockFerry.App.WinUI.Selection;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.Core.Options;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -61,6 +62,8 @@ public sealed partial class OptionsSelectionControl : UserControl
 
     public event EventHandler<OptionsSelectionChangedEventArgs>? SelectionChanged;
 
+    public event EventHandler? SelectAllRequested;
+
     public void LoadCatalog(OptionsSelectionCatalog catalog) =>
         LoadCatalog(catalog, initialSelectedKeys: null);
 
@@ -77,6 +80,7 @@ public sealed partial class OptionsSelectionControl : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
         LockedSafetySummaryText.Text = $"已保护 {catalog.ProtectedDifferences.Count} 项";
+        QueueLocalization();
     }
 
     public void Clear()
@@ -87,9 +91,14 @@ public sealed partial class OptionsSelectionControl : UserControl
         CategoriesPanel.Children.Clear();
         LockedSafetyStrip.Visibility = Visibility.Collapsed;
         LockedSafetySummaryText.Text = string.Empty;
+        UpdateSelectedCount();
     }
 
     public IReadOnlySet<string> SnapshotSelectedKeys() => _viewModel.SnapshotSelectedKeys();
+
+    internal void SelectAll() => _viewModel.SelectAll();
+
+    internal void SetSelectAllEnabled(bool enabled) => ResetSelectionButton.IsEnabled = enabled;
 
     public void ConfigureAccessibility(bool animationsEnabled, bool highContrast)
     {
@@ -139,7 +148,13 @@ public sealed partial class OptionsSelectionControl : UserControl
 
     private void ResetSelectionButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.SelectAll();
+        if (SelectAllRequested is null)
+        {
+            SelectAll();
+            return;
+        }
+
+        SelectAllRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void ViewModel_SelectionChanged(object? sender, OptionsSelectionChangedEventArgs e)
@@ -151,5 +166,18 @@ public sealed partial class OptionsSelectionControl : UserControl
     private void UpdateSelectedCount()
     {
         ResetSelectionButton.IsEnabled = _catalog is not null && _viewModel.SelectedCount < _viewModel.SelectableCount;
+    }
+
+    private void QueueLocalization()
+    {
+        UiText.ApplyToVisualTree(this);
+        var revision = UiText.Revision;
+        _ = DispatcherQueue?.TryEnqueue(() =>
+        {
+            if (revision == UiText.Revision)
+            {
+                UiText.ApplyToVisualTree(this);
+            }
+        });
     }
 }

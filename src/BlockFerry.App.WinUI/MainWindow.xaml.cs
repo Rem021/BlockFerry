@@ -1,5 +1,6 @@
 // Window-level theme, backdrop, and local theme-preference coordination.
 using BlockFerry.App.WinUI.Services;
+using BlockFerry.App.WinUI.Localization;
 using System.Diagnostics;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -25,6 +26,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly AccessibilitySettings _accessibilitySettings = new();
     private readonly BlockFerryCompositionRoot _composition;
     private readonly IThemePreferenceStore _themePreferenceStore;
+    private readonly ILanguagePreferenceStore _languagePreferenceStore;
     private readonly PointerGlowModalCoordinator _pointerGlowModalCoordinator = new();
     private readonly GitHubReleaseUpdateChecker _updateChecker = new();
     private readonly CancellationTokenSource _updateCheckCancellation = new();
@@ -59,8 +61,10 @@ public sealed partial class MainWindow : Window, IDisposable
     {
         _composition = composition ?? throw new ArgumentNullException(nameof(composition));
         _themePreferenceStore = composition.ThemePreferences;
+        _languagePreferenceStore = composition.LanguagePreferences;
+        ApplySavedLanguagePreference();
         InitializeComponent();
-        Title = "BlockFerry · 方块渡口";
+        UpdateLocalizedChrome();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
@@ -72,7 +76,7 @@ public sealed partial class MainWindow : Window, IDisposable
         Closed += MainWindow_Closed;
 
         ConfigureWindowSizing();
-        AppWindow.Resize(new SizeInt32(980, 640));
+        AppWindow.Resize(new SizeInt32(1080, 720));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         ApplySavedThemePreference();
@@ -86,6 +90,10 @@ public sealed partial class MainWindow : Window, IDisposable
             _composition.Workflow,
             folderPicker,
             fileSavePicker);
+        if (RootFrame.Content is MainPage page)
+        {
+            page.ApplyLanguage();
+        }
         SubscribeToDrawerModalPhases();
     }
 
@@ -156,6 +164,7 @@ public sealed partial class MainWindow : Window, IDisposable
     {
         UpdateCaptionInsets();
         UpdateThemePresentation();
+        UpdateLocalizedChrome();
         ApplyAccessibilityPreferences();
         try
         {
@@ -178,10 +187,14 @@ public sealed partial class MainWindow : Window, IDisposable
         }
 
         _availableUpdate = result;
-        UpdateVersionText.Text = $"新版本 {result.LatestVersion}";
+        UpdateVersionText.Text = UiText.Current == UiLanguage.English
+            ? $"New {result.LatestVersion}"
+            : $"新版本 {result.LatestVersion}";
         ToolTipService.SetToolTip(
             UpdateButton,
-            $"在 GitHub 查看 BlockFerry {result.LatestVersion}");
+            UiText.Current == UiLanguage.English
+                ? $"View BlockFerry {result.LatestVersion} on GitHub"
+                : $"在 GitHub 查看 BlockFerry {result.LatestVersion}");
         UpdateButton.Visibility = Visibility.Visible;
     }
 
@@ -254,6 +267,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
     private void ConfigureCaptionButtons()
     {
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         UpdateCaptionInsets();
@@ -299,6 +313,69 @@ public sealed partial class MainWindow : Window, IDisposable
         }
     }
 
+    private void ApplySavedLanguagePreference()
+    {
+        try
+        {
+            UiText.SetLanguage(_languagePreferenceStore.Read() == "en-US"
+                ? UiLanguage.English
+                : UiLanguage.ChineseSimplified);
+        }
+        catch (IOException)
+        {
+            UiText.SetLanguage(UiLanguage.ChineseSimplified);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            UiText.SetLanguage(UiLanguage.ChineseSimplified);
+        }
+    }
+
+    private void LanguageButton_Click(object sender, RoutedEventArgs e)
+    {
+        UiText.SetLanguage(UiText.Current == UiLanguage.English
+            ? UiLanguage.ChineseSimplified
+            : UiLanguage.English);
+        try
+        {
+            _ = _languagePreferenceStore.Write(UiText.LanguageTag);
+        }
+        catch (IOException)
+        {
+            // The language still changes for this session if persistence is unavailable.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The language still changes for this session if persistence is unavailable.
+        }
+
+        UpdateLocalizedChrome();
+        if (RootFrame.Content is MainPage page)
+        {
+            page.ApplyLanguage();
+        }
+    }
+
+    private void UpdateLocalizedChrome()
+    {
+        var english = UiText.Current == UiLanguage.English;
+        Title = english ? "BlockFerry" : "BlockFerry · 方块渡口";
+        LanguageButtonText.Text = english ? "中" : "EN";
+        ToolTipService.SetToolTip(LanguageButton, english ? "切换到中文" : "Switch to English");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            LanguageButton,
+            english ? "切换到中文" : "Switch interface language to English");
+        UiText.ApplyToVisualTree(TopBar);
+        UpdateThemePresentation();
+        if (_availableUpdate is { LatestVersion: { } version })
+        {
+            UpdateVersionText.Text = english ? $"New {version}" : $"新版本 {version}";
+            ToolTipService.SetToolTip(
+                UpdateButton,
+                english ? $"View BlockFerry {version} on GitHub" : $"在 GitHub 查看 BlockFerry {version}");
+        }
+    }
+
     private void ThemeButton_Click(object sender, RoutedEventArgs e)
     {
         if (!_isHighContrast)
@@ -339,8 +416,11 @@ public sealed partial class MainWindow : Window, IDisposable
         ThemeGlyph.Glyph = isDark ? "\uE706" : "\uE708";
 
         var nextThemeName = isDark ? "浅色" : "深色";
-        ToolTipService.SetToolTip(ThemeButton, $"切换到{nextThemeName}主题");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ThemeButton, $"切换到{nextThemeName}主题");
+        var themeTooltip = UiText.Current == UiLanguage.English
+            ? $"Switch to {(isDark ? "light" : "dark")} theme"
+            : $"切换到{nextThemeName}主题";
+        ToolTipService.SetToolTip(ThemeButton, themeTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ThemeButton, themeTooltip);
 
         var foreground = isDark ? Colors.White : Colors.Black;
         AppWindow.TitleBar.ButtonForegroundColor = foreground;

@@ -40,6 +40,8 @@
     <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\blockferry-ambient.jpg" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\blockferry-ambient-light.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\NotoSansSC-Variable.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\NotoSansSC-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(ThirdPartyNoticesPath)" Link="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>

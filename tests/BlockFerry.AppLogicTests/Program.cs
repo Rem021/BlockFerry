@@ -1,6 +1,7 @@
 using BlockFerry.App.WinUI;
 using BlockFerry.App.WinUI.Controls;
 using BlockFerry.App.WinUI.Discovery;
+using BlockFerry.App.WinUI.Localization;
 using BlockFerry.App.WinUI.Selection;
 using BlockFerry.App.WinUI.Services;
 using BlockFerry.Core.Content;
@@ -10,6 +11,7 @@ using BlockFerry.Core.Transactions;
 using Microsoft.UI.Xaml.Controls;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 var testProjectDirectory = Path.GetDirectoryName(CurrentTestSource())!;
@@ -78,6 +80,246 @@ var appMarkup = XDocument.Load(Path.Combine(
     "src",
     "BlockFerry.App.WinUI",
     "App.xaml"));
+var fontAssetPath = Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Assets",
+    "Fonts",
+    "NotoSansSC-Variable.ttf");
+var fontLicensePath = Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Assets",
+    "Fonts",
+    "NotoSansSC-OFL.txt");
+Assert(File.Exists(fontAssetPath) && new FileInfo(fontAssetPath).Length > 10_000_000,
+    "The release must include the complete Noto Sans SC variable font, not a placeholder asset.");
+Assert(File.Exists(fontLicensePath) && File.ReadAllText(fontLicensePath).Contains("SIL OPEN FONT LICENSE", StringComparison.Ordinal),
+    "The Noto Sans SC OFL license must ship beside the font.");
+var thirdPartyNotices = File.ReadAllText(Path.Combine(repositoryRoot, "THIRD-PARTY-NOTICES.txt"));
+Assert(thirdPartyNotices.Contains("SIL OPEN FONT LICENSE Version 1.1", StringComparison.Ordinal) &&
+       thirdPartyNotices.Contains("PERMISSION & CONDITIONS", StringComparison.Ordinal) &&
+       thirdPartyNotices.Contains("TERMINATION", StringComparison.Ordinal),
+    "The portable top-level notices must contain the complete, human-readable Noto Sans SC license.");
+Assert(!File.Exists(Path.Combine(Path.GetDirectoryName(fontAssetPath)!, "MiSans-Bold.ttf")),
+    "The retired MiSans asset must not remain in the distributable font folder.");
+Assert(appMarkup.Descendants().Any(element =>
+        (string?)element.Attribute(xamlNamespace + "Key") == "AppFontFamily" &&
+        element.Value.Contains("NotoSansSC-Variable.ttf#Noto Sans SC", StringComparison.Ordinal)),
+    "App.xaml must apply the bundled Noto Sans SC family.");
+
+UiText.SetLanguage(UiLanguage.ChineseSimplified);
+var initialLanguageRevision = UiText.Revision;
+UiText.SetLanguage(UiLanguage.English);
+var englishLanguageRevision = UiText.Revision;
+UiText.SetLanguage(UiLanguage.English);
+Assert(englishLanguageRevision == initialLanguageRevision + 1 &&
+       UiText.Revision == englishLanguageRevision,
+    "Language revisions must advance exactly once per real switch so queued passes cannot apply stale state.");
+Assert(UiText.Translate("选择同步设置") == "Choose sync settings" &&
+       UiText.Translate("已选 7 / 12 项设置") == "Selected 7 / 12 items" &&
+       UiText.Translate("已生成 4 项计划变更 · 0 写入") ==
+           "Created 4 planned changes · 0 writes" &&
+       UiText.Translate("计划同步 4 项设置；这是只读预览，0 写入。") ==
+           "Planned sync: 4 settings. This is a read-only preview with 0 writes." &&
+       UiText.Translate("只读预览已完成，计划同步 4 项设置。") ==
+           "Read-only preview complete. 4 settings are planned." &&
+       UiText.Translate("当前步骤") == "Current step" &&
+       UiText.Translate("已完成步骤") == "Completed step" &&
+       UiText.Translate("待进行") == "Pending" &&
+       UiText.Translate("计划变更，4 项") == "Planned changes, 4 items" &&
+       UiText.Translate("原版设置，4 项，按类别汇总 · 展开查看具体键值") ==
+           "Vanilla settings, 4 items, Grouped by category · expand for individual values" &&
+       UiText.Translate("未选择 0 · 受保护 1 · 仅目标 1") ==
+           "Unselected 0 · protected 1 · target-only 1" &&
+       UiText.Translate("已检查 2 / 5 个还原点；备份 2 个文件") ==
+           "Checked 2 / 5 restore points; backed up 2 files" &&
+       UiText.Translate("已准备 3 / 5 个文件") == "Staged 3 / 5 files" &&
+       UiText.Translate("已封存 4 / 5 个验证副本") == "Sealed 4 / 5 verification copies" &&
+       UiText.Translate("已安全写入 5 / 5 个文件") == "Safely wrote 5 / 5 files" &&
+       UiText.Translate("已验证完成 5 个文件") == "Verified 5 files",
+    "English UI projection must cover static and count-based sync copy.");
+var unknownProgress = MigrationProgressPresenter.Create(
+    new MigrationProgress(
+        MigrationProgressStage.Revalidating,
+        0,
+        0,
+        "正在确认 PCL 已完成实例写入"),
+    "fallback");
+Assert(unknownProgress.IsIndeterminate &&
+       Math.Abs(unknownProgress.Percent) < 0.01,
+    "Unknown-duration safety waits must animate as indeterminate and must not invent a stage percentage.");
+var halfwayProgress = MigrationProgressPresenter.Create(
+    new MigrationProgress(MigrationProgressStage.Committing, 3, 6, "提交文件"),
+    "fallback");
+Assert(Math.Abs(halfwayProgress.Percent - 50) < 0.01 &&
+       !halfwayProgress.IsIndeterminate &&
+       halfwayProgress.StageText == "提交文件" &&
+       UiText.Translate(halfwayProgress.StageText) == "Committing files",
+    "The progress presenter must preserve source copy while exposing a real completed-step percentage for lightweight localization.");
+var rollbackProgress = MigrationProgressPresenter.Create(
+    new MigrationProgress(MigrationProgressStage.RollingBack, 0, 1, "安全回滚"),
+    "fallback");
+var monotonicProgress = new MigrationProgressAccumulator();
+Assert(Math.Abs(monotonicProgress.Advance(halfwayProgress.Percent) - 50) < 0.01 &&
+       Math.Abs(monotonicProgress.Advance(rollbackProgress.Percent) - 50) < 0.01 &&
+       Math.Abs(monotonicProgress.Current - 50) < 0.01 &&
+       Math.Abs(monotonicProgress.Advance(100) - 100) < 0.01 &&
+       Math.Abs(monotonicProgress.Current - 100) < 0.01,
+    "A rollback must never move the visible operation progress behind its established high-water mark.");
+monotonicProgress.Reset();
+Assert(Math.Abs(monotonicProgress.Advance(8) - 8) < 0.01,
+    "A new operation must be able to reset and establish a fresh progress high-water mark.");
+Assert(ContinuousMotionPolicy.Allows(active: true, animationsEnabled: true, highContrast: false) &&
+       !ContinuousMotionPolicy.Allows(active: true, animationsEnabled: false, highContrast: false) &&
+       !ContinuousMotionPolicy.Allows(active: true, animationsEnabled: true, highContrast: true) &&
+       !ContinuousMotionPolicy.Allows(active: false, animationsEnabled: true, highContrast: false),
+    "Continuous busy animation must stay disabled for reduced motion, high contrast, and inactive states.");
+UiText.SetLanguage(UiLanguage.ChineseSimplified);
+Assert(UiText.Translate("选择同步设置") == "选择同步设置" &&
+       UiText.Revision == englishLanguageRevision + 1,
+    "Switching back to Chinese must preserve the source UI copy.");
+var uiTextSource = File.ReadAllText(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Localization",
+    "UiText.cs"));
+Assert(uiTextSource.Contains("if (root is not UIElement)", StringComparison.Ordinal),
+    "Localization traversal must never pass non-visual Run nodes to VisualTreeHelper.");
+Assert(uiTextSource.Contains("AutomationProperties.GetItemStatus(value)", StringComparison.Ordinal) &&
+       uiTextSource.Contains("AutomationProperties.SetItemStatus(value, text)", StringComparison.Ordinal),
+    "Localization must project automation item status alongside name and help text.");
+
+var localizedMainWindowMarkup = XDocument.Load(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "MainWindow.xaml"));
+var languageButton = localizedMainWindowMarkup.Descendants().Single(element =>
+    (string?)element.Attribute(xamlNamespace + "Name") == "LanguageButton");
+var languageButtonText = localizedMainWindowMarkup.Descendants().Single(element =>
+    (string?)element.Attribute(xamlNamespace + "Name") == "LanguageButtonText");
+Assert(languageButton.Name.LocalName == "Button" &&
+       (string?)languageButtonText.Parent?.Attribute("Height") == "48" &&
+       (string?)languageButtonText.Attribute("HorizontalAlignment") == "Center" &&
+       (string?)languageButtonText.Attribute("VerticalAlignment") == "Center" &&
+       (string?)languageButtonText.Attribute("TextAlignment") == "Center",
+    "The title bar must expose an in-app language switch.");
+var titleBarChromeButtonStyle = appMarkup.Descendants().Single(element =>
+    element.Name.LocalName == "Style" &&
+    (string?)element.Attribute(xamlNamespace + "Key") == "TitleBarChromeButtonStyle");
+var titleBarChromeButtonSetters = titleBarChromeButtonStyle
+    .Elements()
+    .Where(element => element.Name.LocalName == "Setter")
+    .ToDictionary(
+        element => (string)element.Attribute("Property")!,
+        element => (string)element.Attribute("Value")!,
+        StringComparer.Ordinal);
+Assert((string?)languageButtonText.Attribute("Margin") == "0,-2,0,2" &&
+       (string?)languageButton.Attribute("Style") ==
+           "{StaticResource TitleBarChromeButtonStyle}" &&
+       titleBarChromeButtonSetters.GetValueOrDefault("Width") == "46" &&
+       titleBarChromeButtonSetters.GetValueOrDefault("Height") == "48" &&
+       titleBarChromeButtonSetters.GetValueOrDefault("MinWidth") == "46" &&
+       titleBarChromeButtonSetters.GetValueOrDefault("MinHeight") == "48",
+    "TitleBarLanguageOpticalAlignment: the EN/中 label must move up 2 DIPs without resizing the 46-by-48 title-bar hit target.");
+var mainPageMarkupForActivity = XDocument.Load(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "MainPage.xaml"));
+foreach (var requiredName in new[]
+         {
+             "DiscoveryProgressRing",
+             "DiscoveryProgressBar",
+             "DrawerActivityRing",
+             "DrawerProgressBar",
+             "ExecutionActivityRing",
+             "ExecutionProgressBar",
+         })
+{
+    Assert(mainPageMarkupForActivity.Descendants().Any(element =>
+            (string?)element.Attribute(xamlNamespace + "Name") == requiredName),
+        $"The UI must contain the {requiredName} activity indicator.");
+}
+
+UiText.SetLanguage(UiLanguage.English);
+var untranslatedStaticCopy = new SortedSet<string>(StringComparer.Ordinal);
+var localizedMarkupPaths = new[]
+{
+    Path.Combine(repositoryRoot, "src", "BlockFerry.App.WinUI", "MainWindow.xaml"),
+    Path.Combine(repositoryRoot, "src", "BlockFerry.App.WinUI", "MainPage.xaml"),
+}.Concat(Directory.EnumerateFiles(
+    Path.Combine(repositoryRoot, "src", "BlockFerry.App.WinUI", "Controls"),
+    "*.xaml",
+    SearchOption.TopDirectoryOnly));
+foreach (var markupPath in localizedMarkupPaths)
+{
+    var markup = XDocument.Load(markupPath);
+    var visibleStrings = markup.Descendants()
+        .SelectMany(element => element.Attributes()
+            .Where(attribute => !attribute.IsNamespaceDeclaration)
+            .Select(attribute => attribute.Value)
+            .Concat(element.Name.LocalName == "String" ? [element.Value] : []))
+        .Where(value => value.Any(character => character is >= '\u3400' and <= '\u9fff'));
+    foreach (var visibleString in visibleStrings)
+    {
+        if (UiText.Translate(visibleString).Any(character => character is >= '\u3400' and <= '\u9fff'))
+        {
+            _ = untranslatedStaticCopy.Add(visibleString);
+        }
+    }
+}
+
+Assert(untranslatedStaticCopy.Count == 0,
+    $"Every static XAML string must have complete English copy: {string.Join(" | ", untranslatedStaticCopy)}");
+
+var uiSourceRoot = Path.Combine(repositoryRoot, "src", "BlockFerry.App.WinUI");
+var dynamicCopyFiles = new[]
+{
+    Path.Combine(uiSourceRoot, "MainWindow.xaml.cs"),
+    Path.Combine(uiSourceRoot, "MainPage.xaml.cs"),
+    Path.Combine(uiSourceRoot, "MainPage.Migration.cs"),
+    Path.Combine(uiSourceRoot, "MigrationViewState.cs"),
+    Path.Combine(uiSourceRoot, "Discovery", "DiscoveryUiText.cs"),
+    Path.Combine(uiSourceRoot, "Services", "MigrationWorkflowCoordinator.cs"),
+}.Concat(Directory.EnumerateFiles(Path.Combine(uiSourceRoot, "Selection"), "*.cs"))
+ .Concat(Directory.EnumerateFiles(Path.Combine(uiSourceRoot, "Controls"), "*.cs"));
+var untranslatedDynamicCopy = new SortedSet<string>(StringComparer.Ordinal);
+var quotedChinese = new Regex("\\\"(?:\\\\.|[^\\\"\\\\])*[\\u3400-\\u9fff](?:\\\\.|[^\\\"\\\\])*\\\"",
+    RegexOptions.CultureInvariant);
+foreach (var copyFile in dynamicCopyFiles)
+{
+    foreach (Match match in quotedChinese.Matches(File.ReadAllText(copyFile)))
+    {
+        var sourceCopy = match.Value[1..^1];
+        if (sourceCopy == "中")
+        {
+            continue;
+        }
+
+        if (UiText.Translate(sourceCopy).Any(character => character is >= '\u3400' and <= '\u9fff'))
+        {
+            _ = untranslatedDynamicCopy.Add(sourceCopy);
+        }
+    }
+}
+
+if (untranslatedDynamicCopy.Count > 0)
+{
+    Console.WriteLine($"UNTRANSLATED_DYNAMIC_COUNT={untranslatedDynamicCopy.Count}");
+    foreach (var untranslated in untranslatedDynamicCopy.Take(100))
+    {
+        Console.WriteLine($"UNTRANSLATED_DYNAMIC={untranslated}");
+    }
+}
+
+Assert(untranslatedDynamicCopy.Count == 0,
+    "Every dynamic UI string must have complete English copy.");
+UiText.SetLanguage(UiLanguage.ChineseSimplified);
 var requiredCardResourceKeys = new[]
 {
     "OptionCardStrokeBrush",
@@ -215,11 +457,11 @@ Assert(categoryIconElement!.Name.LocalName == "SymbolIcon" &&
        (string?)categoryIconElement.Attribute("AutomationProperties.AccessibilityView") == "Raw" &&
        (string?)categoryIconElement.Attribute("IsHitTestVisible") == "False",
     "CategoryIcon must be a decorative, non-hit-testable 20-DIP SymbolIcon.");
-Assert((string?)categoryIconTileElement!.Attribute("Width") == "32" &&
-       (string?)categoryIconTileElement.Attribute("Height") == "32" &&
+Assert((string?)categoryIconTileElement!.Attribute("Width") == "38" &&
+       (string?)categoryIconTileElement.Attribute("Height") == "38" &&
        (string?)categoryIconTileElement.Attribute("AutomationProperties.AccessibilityView") == "Raw" &&
        (string?)categoryIconTileElement.Attribute("IsHitTestVisible") == "False",
-    "CategoryIconTile must be a decorative, non-hit-testable 32-by-32 tile.");
+    "CategoryIconTile must be a decorative, non-hit-testable 38-by-38 tile.");
 Assert(categoryIconElement.Ancestors().Contains(categoryIconTileElement) &&
        categoryIconTileElement.Ancestors().Contains(categoryCheckBoxElement),
     "CategoryIcon and its tile must be descendants of the native category checkbox content.");
@@ -254,7 +496,7 @@ var categoryContentElement = categoryContentMatches.Length <= 1
 Assert(categoryContentMatches.Length == 1 && categoryContentElement is not null,
     "Each category card must contain exactly one named CategoryContent container.");
 Assert((string?)categorySurfaceElement.Attribute("Padding") == "0" &&
-       (string?)categoryContentElement!.Attribute("Padding") == "12" &&
+       (string?)categoryContentElement!.Attribute("Padding") == "16" &&
        selectedSurfaceElement.Parent == categoryContentElement.Parent &&
        categoryContentElement.Ancestors().Contains(categorySurfaceElement),
     "Category content padding must be inner content so the selected overlay covers the full outer card.");
@@ -295,6 +537,11 @@ Assert(!categoryControlSource.Contains("OptionSettingCategory.LanguageAndInterfa
     "OptionCategoryControl must not duplicate the Task 3 category-to-symbol mapping.");
 Assert(!categoryControlSource.Contains("CategorySurface.BorderBrush =", StringComparison.Ordinal),
     "Selection refresh must not replace CategorySurface's ThemeResource brush with a concrete brush.");
+var categoryBindBody = ExtractCSharpMethodBody(categoryControlSource, "internal void Bind(");
+Assert(!categoryBindBody.Contains("BuildSettingControls(viewModel);", StringComparison.Ordinal) &&
+       categoryControlSource.Contains("if (expanded)", StringComparison.Ordinal) &&
+       categoryControlSource.Contains("EnsureSettingControls();", StringComparison.Ordinal),
+    "Collapsed option categories must defer constructing individual setting rows until first expansion.");
 var expandBeforeSettingFocus = categoryControlSource.IndexOf(
     "DisclosureButton.IsExpanded = true;",
     StringComparison.Ordinal);
@@ -380,6 +627,10 @@ Assert(categoryControlSource.Contains(
         "new SettingControlRegistration(setting, settingCheckBox, displayName, technicalKey, rowSurface, propertyChanged)",
         StringComparison.Ordinal),
     "Each setting registration must retain its display-name, technical-key, and row-surface presentation elements.");
+Assert(categoryControlSource.Contains("QueueHeaderLocalization();", StringComparison.Ordinal) &&
+       categoryControlSource.Contains("UiText.ApplyToVisualTree(CategoryCheckBox);", StringComparison.Ordinal) &&
+       categoryControlSource.Contains("UiText.ApplyToVisualTree(DisclosureButton);", StringComparison.Ordinal),
+    "New and updated option-category cards must project the active language after their dynamic labels are bound.");
 
 var selectionMarkup = XDocument.Load(
     Path.Combine(AppContext.BaseDirectory, "UiContracts", "OptionsSelectionControl.xaml"));
@@ -392,20 +643,25 @@ var resetSelectionButtonElement = resetSelectionButtonMatches.Length <= 1
     : null;
 Assert(resetSelectionButtonMatches.Length == 1 && resetSelectionButtonElement is not null,
     "OptionsSelectionControl must contain exactly one ResetSelectionButton.");
-Assert((string?)resetSelectionButtonElement!.Attribute("Content") == "恢复全选",
-    "ResetSelectionButton must use the exact 恢复全选 label.");
+Assert((string?)resetSelectionButtonElement!.Attribute("Content") == "全选",
+    "ResetSelectionButton must expose the single global 全选 action.");
 var selectionControlSource = File.ReadAllText(Path.Combine(
     repositoryRoot,
     "src",
     "BlockFerry.App.WinUI",
     "Controls",
     "OptionsSelectionControl.xaml.cs"));
-Assert(selectionControlSource.Contains("_viewModel.SelectAll();", StringComparison.Ordinal),
-    "The restore-all click handler must call the in-place OptionsSelectionViewModel.SelectAll method.");
+Assert(selectionControlSource.Contains("public event EventHandler? SelectAllRequested;", StringComparison.Ordinal) &&
+       selectionControlSource.Contains("internal void SelectAll()", StringComparison.Ordinal) &&
+       selectionControlSource.Contains("SelectAllRequested?.Invoke(this, EventArgs.Empty);", StringComparison.Ordinal),
+    "The select-all control must expose one parent request while retaining an in-place vanilla selection method.");
 Assert(selectionControlSource.Split("RenderCategories();", StringSplitOptions.None).Length - 1 == 1,
     "RenderCategories must be invoked exactly once, only when a catalog is loaded.");
 Assert(!selectionControlSource.Contains("_viewModel.Reset(_catalog);", StringComparison.Ordinal),
     "The restore-all click handler must not reset the catalog or rebuild category controls.");
+Assert(selectionControlSource.Contains("QueueLocalization();", StringComparison.Ordinal) &&
+       selectionControlSource.Contains("UiText.ApplyToVisualTree(this);", StringComparison.Ordinal),
+    "A newly rendered options catalog must localize its realized cards in the current language.");
 var lockedSafetyIconMatches = selectionMarkup
     .Descendants()
     .Where(element => (string?)element.Attribute(xamlNamespace + "Name") == "LockedSafetyIcon")
@@ -515,7 +771,8 @@ Assert(adapterIcon.Name.LocalName == "SymbolIcon" &&
        (string?)adapterIcon.Attribute("IsHitTestVisible") == "False",
     "Adapter icons must be decorative built-in WinUI SymbolIcons.");
 Assert(adapterDisclosure.Name.LocalName == "ExpandCollapseButton" &&
-       !adapterDisclosure.Ancestors().Contains(adapterCheckBox),
+       !adapterDisclosure.Ancestors().Contains(adapterCheckBox) &&
+       (string?)adapterDisclosure.Attribute("FontFamily") == "Segoe MDL2 Assets",
     "Each adapter card must have an independent disclosure button outside its selection checkbox.");
 Assert((string?)adapterDetails.Attribute("Visibility") == "Collapsed" &&
        (string?)adapterDetails.Attribute("Opacity") == "0",
@@ -524,6 +781,20 @@ Assert((string?)emiStatus.Attribute("Visibility") == "Collapsed" &&
        (string?)emiStatus.Attribute("IsHitTestVisible") == "False" &&
        (string?)emiStatus.Attribute("AutomationProperties.Name") == "检测到 EMI 收藏：beta.4 暂不支持",
     "The EMI row must be a hidden-by-default read-only status with fixed safe UIA text.");
+var contentCardSource = File.ReadAllText(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Controls",
+    "ContentAdapterCard.xaml.cs"));
+var contentCardBindBody = ExtractCSharpMethodBody(contentCardSource, "internal void Bind(");
+Assert(!contentCardBindBody.Contains("BuildItemControls(viewModel);", StringComparison.Ordinal) &&
+       contentCardSource.Contains("if (expanded && !_itemsBuilt", StringComparison.Ordinal),
+    "Collapsed mod-setting cards must defer constructing large item lists until first expansion.");
+Assert(contentCardSource.Contains("QueueHeaderLocalization();", StringComparison.Ordinal) &&
+       contentCardSource.Contains("UiText.ApplyToVisualTree(AdapterCheckBox);", StringComparison.Ordinal) &&
+       contentCardSource.Contains("UiText.ApplyToVisualTree(AdapterDisclosureButton);", StringComparison.Ordinal),
+    "New and updated mod-setting cards must project the active language after their dynamic labels are bound.");
 
 var conflictMarkup = XDocument.Load(
     Path.Combine(AppContext.BaseDirectory, "UiContracts", "ConflictResolutionControl.xaml"));
@@ -545,7 +816,40 @@ var optionsSelectionPanel = RequireNamedElement(mainPageMarkup, xamlNamespace, "
 var optionsSelectionControl = RequireNamedElement(mainPageMarkup, xamlNamespace, "OptionsSelectionControl");
 var contentSelectionSection = RequireNamedElement(mainPageMarkup, xamlNamespace, "ContentSelectionSection");
 var contentCardsPanel = RequireNamedElement(mainPageMarkup, xamlNamespace, "ContentAdapterCardsPanel");
+var drawerPanelElement = RequireNamedElement(mainPageMarkup, xamlNamespace, "DrawerPanel");
+var workspaceSelectionLayout = RequireNamedElement(mainPageMarkup, xamlNamespace, "WorkspaceSelectionLayout");
+var workspaceGuideColumn = RequireNamedElement(mainPageMarkup, xamlNamespace, "WorkspaceGuideColumn");
+var workspaceStageColumn = RequireNamedElement(mainPageMarkup, xamlNamespace, "WorkspaceStageColumn");
+var executionExperience = RequireNamedElement(mainPageMarkup, xamlNamespace, "ExecutionExperience");
+var sceneHeaderPanel = RequireNamedElement(mainPageMarkup, xamlNamespace, "SceneHeaderPanel");
+var sceneTaglineText = RequireNamedElement(mainPageMarkup, xamlNamespace, "SceneTaglineText");
+foreach (var persistentLanguageName in new[]
+         {
+             "SceneHeaderTitleText",
+             "DrawerEyebrowText",
+             "DrawerWorkspaceTitleText",
+             "WorkspaceSelectStepText",
+             "WorkspaceReviewStepText",
+             "WorkspaceExecuteStepText",
+         })
+{
+    _ = RequireNamedElement(mainPageMarkup, xamlNamespace, persistentLanguageName);
+}
+Assert(sceneHeaderPanel.Descendants().Any() && sceneTaglineText.Name.LocalName == "TextBlock",
+    "Persistent scene, workspace, and stage labels must be named for explicit language projection.");
+Assert((string?)drawerPanelElement.Attribute("HorizontalAlignment") == "Stretch" &&
+       (string?)drawerPanelElement.Attribute("VerticalAlignment") == "Stretch" &&
+       drawerPanelElement.Attribute("Width") is null &&
+       (string?)drawerPanelElement.Attribute("BorderThickness") == "0",
+    "The migration workflow must occupy the full scene instead of remaining a fixed-width right drawer.");
+Assert(workspaceSelectionLayout.Descendants().Contains(workspaceGuideColumn) &&
+       workspaceSelectionLayout.Descendants().Contains(workspaceStageColumn) &&
+       !workspaceSelectionLayout.Descendants().Contains(executionExperience) &&
+       (string?)executionExperience.Attribute("Visibility") == "Collapsed",
+    "Selection and execution must be separate full-workspace stages.");
 Assert(optionsSelectionPanel.Descendants().Contains(optionsSelectionControl) &&
+       (string?)optionsSelectionControl.Attribute("SelectAllRequested") ==
+           "OptionsSelectionControl_SelectAllRequested" &&
        contentSelectionSection.Descendants().Contains(contentCardsPanel) &&
        ReferenceEquals(optionsSelectionPanel.Parent, contentSelectionSection.Parent) &&
        optionsSelectionPanel.ElementsBeforeSelf().Count() < contentSelectionSection.ElementsBeforeSelf().Count(),
@@ -651,14 +955,47 @@ var migrationReviewPath = Path.Combine(
     "MigrationReviewControl.xaml");
 Assert(File.Exists(migrationReviewPath),
     "MigrationReviewControl must exist as the grouped card review surface.");
+var migrationReviewSource = File.ReadAllText(Path.ChangeExtension(migrationReviewPath, ".xaml.cs"));
+Assert(migrationReviewSource.Split("QueueLocalization();", StringSplitOptions.None).Length - 1 >= 2 &&
+       migrationReviewSource.Contains("UiText.ApplyToVisualTree(this);", StringComparison.Ordinal) &&
+       migrationReviewSource.Contains("DispatcherQueuePriority.Low", StringComparison.Ordinal),
+    "Both real and demo review models must localize their newly realized grouped cards after item containers are laid out.");
 var migrationReviewMarkup = XDocument.Load(migrationReviewPath);
 var reviewGroupsElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewGroupsItemsControl");
 var reviewGroupCardElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewGroupCard");
-var reviewItemCardElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewItemCard");
+var reviewBundleCardElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewBundleCard");
+var reviewBundleExpanderElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewBundleExpander");
+var reviewDetailsItemsElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewDetailsItemsControl");
+var reviewDetailRowElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewDetailRow");
+var reviewGroupTitleElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewGroupTitleText");
+var reviewBundleTitleElement = RequireNamedElement(migrationReviewMarkup, xamlNamespace, "ReviewBundleTitleText");
 Assert(reviewGroupsElement.Name.LocalName == "ItemsControl" &&
        (string?)reviewGroupCardElement.Attribute("CornerRadius") == "14" &&
-       (string?)reviewItemCardElement.Attribute("CornerRadius") == "10",
-    "Migration review must render nested rounded group and item cards.");
+       (string?)reviewBundleCardElement.Attribute("CornerRadius") == "11" &&
+       (string?)reviewDetailRowElement.Attribute("CornerRadius") == "8" &&
+       reviewBundleExpanderElement.Name.LocalName == "Expander" &&
+       (string?)reviewBundleExpanderElement.Attribute("IsExpanded") == "False" &&
+       (string?)reviewBundleExpanderElement.Attribute("Expanding") == "ReviewBundleExpander_Expanding" &&
+       reviewDetailsItemsElement.Attribute("ItemsSource") is null,
+    "Migration review must collapse detailed rows inside rounded category bundles by default.");
+Assert((string?)reviewGroupTitleElement.Attribute("FontWeight") == "Bold" &&
+       (string?)reviewBundleTitleElement.Attribute("FontWeight") == "Bold",
+    "Migration review group and category headings must retain the stronger visual weight.");
+Assert((string?)reviewBundleExpanderElement.Attribute("HorizontalAlignment") == "Stretch" &&
+       (string?)reviewBundleExpanderElement.Attribute("HorizontalContentAlignment") == "Stretch",
+    "Migration review bundle expanders must stretch themselves and their content across the bundle card.");
+var reviewDetailsLayoutElement = reviewDetailsItemsElement
+    .Descendants()
+    .SingleOrDefault(element => element.Name.LocalName == "UniformGridLayout");
+Assert(reviewDetailsItemsElement.Name.LocalName == "ItemsRepeater" &&
+       reviewDetailsLayoutElement is not null &&
+       (string?)reviewDetailsLayoutElement.Attribute("Orientation") == "Vertical" &&
+       (string?)reviewDetailsLayoutElement.Attribute("MaximumRowsOrColumns") == "2" &&
+       (string?)reviewDetailsLayoutElement.Attribute("MinItemWidth") == "320" &&
+       (string?)reviewDetailsLayoutElement.Attribute("MinColumnSpacing") == "8" &&
+       (string?)reviewDetailsLayoutElement.Attribute("MinRowSpacing") == "6" &&
+       (string?)reviewDetailsLayoutElement.Attribute("ItemsStretch") == "Fill",
+    "Migration review details must fill a responsive grid capped at two columns and collapse to one column below two 320px cards.");
 
 var drawerFooterGridElement = RequireNamedElement(mainPageMarkup, xamlNamespace, "DrawerFooterGrid");
 var footerStatusHostElement = RequireNamedElement(mainPageMarkup, xamlNamespace, "FooterStatusHost");
@@ -684,7 +1021,7 @@ var drawerWidthStateNames = drawerWidthStatesElement
     .Select(element => (string?)element.Attribute(xamlNamespace + "Name"))
     .ToList();
 Assert(drawerWidthStateNames.IndexOf("DrawerWideState") < drawerWidthStateNames.IndexOf("DrawerCompactState"),
-    "DrawerWideState must be declared before DrawerCompactState so the 381-DIP trigger wins when both are active.");
+    "DrawerWideState must be declared before DrawerCompactState so the desktop trigger wins when both are active.");
 var compactTrigger = compactStateElement.Descendants()
     .Single(element => element.Name.LocalName == "AdaptiveTrigger");
 var wideTrigger = wideStateElement.Descendants()
@@ -692,7 +1029,7 @@ var wideTrigger = wideStateElement.Descendants()
 Assert((string?)compactTrigger.Attribute("MinWindowWidth") == "0",
     "DrawerCompactState must be the MinWindowWidth=0 fallback.");
 Assert(int.TryParse((string?)wideTrigger.Attribute("MinWindowWidth"), out var wideMinimum) && wideMinimum >= 381,
-    "DrawerWideState must override compact layout from 381 DIP or greater.");
+    "DrawerWideState must override compact layout at a desktop-safe width.");
 var compactSetterMap = compactStateElement
     .Descendants()
     .Where(element => element.Name.LocalName == "Setter")
@@ -702,14 +1039,12 @@ var compactSetterMap = compactStateElement
         StringComparer.Ordinal);
 var expectedCompactSetters = new Dictionary<string, string>(StringComparer.Ordinal)
 {
-    ["SourceRouteField.(Grid.Row)"] = "0",
-    ["SourceRouteField.(Grid.Column)"] = "0",
-    ["SourceRouteField.(Grid.ColumnSpan)"] = "3",
-    ["RouteDirectionIcon.(Grid.Row)"] = "1",
-    ["RouteDirectionIcon.(Grid.Column)"] = "1",
-    ["TargetRouteField.(Grid.Row)"] = "2",
-    ["TargetRouteField.(Grid.Column)"] = "0",
-    ["TargetRouteField.(Grid.ColumnSpan)"] = "3",
+    ["WorkspaceGuideColumn.(Grid.Row)"] = "0",
+    ["WorkspaceGuideColumn.(Grid.Column)"] = "0",
+    ["WorkspaceGuideColumn.(Grid.ColumnSpan)"] = "2",
+    ["WorkspaceStageColumn.(Grid.Row)"] = "1",
+    ["WorkspaceStageColumn.(Grid.Column)"] = "0",
+    ["WorkspaceStageColumn.(Grid.ColumnSpan)"] = "2",
     ["FooterStatusHost.(Grid.Row)"] = "0",
     ["DryRunPreviewButton.(Grid.Row)"] = "1",
     ["DryRunPreviewButton.(Grid.Column)"] = "0",
@@ -732,6 +1067,201 @@ var mainPageMigrationSource = File.ReadAllText(Path.Combine(
     "src",
     "BlockFerry.App.WinUI",
     "MainPage.Migration.cs"));
+var applyLanguageSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "internal void ApplyLanguage()");
+Assert(applyLanguageSource.Contains("QueueLocalization();", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(SceneLayer);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(SceneHeaderPanel);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(SceneTaglineText);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(DrawerPanel);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(DrawerHeaderPanel);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(WorkspaceGuideColumn);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(WorkspaceStageColumn);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(ResultCard);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(ExecutionExperience);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueueSubtreeLocalization(DrawerFooterGrid);", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("QueuePrefixLocalization();", StringComparison.Ordinal) &&
+       applyLanguageSource.Contains("ProjectPersistentLanguageCopy();", StringComparison.Ordinal) &&
+       !applyLanguageSource.Contains("PresentWorkflowState(", StringComparison.Ordinal) &&
+       !applyLanguageSource.Contains("ProjectViewState(", StringComparison.Ordinal),
+    "Changing language must translate the visible workspace in place without resetting selection, review, execution, or result stages.");
+var persistentLanguageSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void ProjectPersistentLanguageCopy()");
+foreach (var requiredTarget in new[]
+         {
+             "SceneHeaderTitleText",
+             "SceneTaglineText",
+             "DrawerEyebrowText",
+             "DrawerWorkspaceTitleText",
+             "WorkspaceSelectStepText",
+             "WorkspaceReviewStepText",
+             "WorkspaceExecuteStepText",
+         })
+{
+    Assert(persistentLanguageSource.Contains(requiredTarget, StringComparison.Ordinal),
+        $"Persistent language projection must update {requiredTarget} directly.");
+}
+var queuePrefixSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void QueuePrefixLocalization()");
+Assert(queuePrefixSource.Contains("UiText.Translate(_viewState.SourceVersion)", StringComparison.Ordinal) &&
+       queuePrefixSource.Contains("UiText.Translate(_viewState.TargetVersion)", StringComparison.Ordinal),
+    "The non-visual source and target Run nodes must be projected directly for cold-start and language switching.");
+var projectViewStateSource = ExtractCSharpMethodBody(mainPageSource, "private void ProjectViewState(");
+Assert(projectViewStateSource.Contains("QueuePrefixLocalization();", StringComparison.Ordinal),
+    "Every projected discovery state must refresh the non-visual version Run nodes.");
+var openDrawerSource = ExtractCSharpMethodBody(mainPageSource, "private void OpenDrawer(");
+Assert(openDrawerSource.Contains("QueueSubtreeLocalization(DrawerPanel);", StringComparison.Ordinal) &&
+       openDrawerSource.Contains("QueueSubtreeLocalization(DrawerHeaderPanel);", StringComparison.Ordinal) &&
+       openDrawerSource.Contains("QueueSubtreeLocalization(DrawerFooterGrid);", StringComparison.Ordinal),
+    "Opening a previously collapsed workspace must localize its now-realized visual subtree before interaction.");
+var completeDrawerOpenSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void CompleteDrawerOpen(long generation)");
+Assert(completeDrawerOpenSource.Contains("QueueSubtreeLocalization(DrawerPanel);", StringComparison.Ordinal) &&
+       completeDrawerOpenSource.Contains("QueueSubtreeLocalization(WorkspaceStageColumn);", StringComparison.Ordinal) &&
+       completeDrawerOpenSource.Contains("QueueSubtreeLocalization(DrawerFooterGrid);", StringComparison.Ordinal),
+    "Completing the open animation must re-localize controls that were created or realized while the workspace was collapsed.");
+var presentSelectedPreviewSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void PresentSelectedPreview(");
+Assert(presentSelectedPreviewSource.Contains("QueueSubtreeLocalization(ResultCard);", StringComparison.Ordinal),
+    "A newly realized demo review surface must be localized before it is announced or focused.");
+Assert(presentSelectedPreviewSource.Contains("PreviewResultTitleText.Text = \"确认同步清单\";", StringComparison.Ordinal) &&
+       presentSelectedPreviewSource.Contains("LocalizeElements(PreviewResultTitleText);", StringComparison.Ordinal),
+    "The demo review heading must be re-projected after the result card becomes visible.");
+Assert(presentSelectedPreviewSource.Contains("UiText.Translate(", StringComparison.Ordinal),
+    "The demo preview completion announcement must use the active UI language.");
+var presentDiscoverySource = ExtractCSharpMethodBody(mainPageSource, "private void PresentDiscoveryViewModel()");
+Assert(presentDiscoverySource.Contains("LocalizeElements(ScanStatusText);", StringComparison.Ordinal),
+    "A discovery status assigned after an asynchronous scan must be localized immediately.");
+var showSelectionErrorSource = ExtractCSharpMethodBody(mainPageSource, "private void ShowSelectionError(");
+Assert(showSelectionErrorSource.Contains("QueueSubtreeLocalization(ErrorCard);", StringComparison.Ordinal),
+    "A newly realized selection error and its diagnostics must be localized before display.");
+Assert(mainPageMigrationSource.Contains("var showExecution = workflowState.Phase is", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("WorkspaceSelectionLayout.Visibility = showSelection", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("ExecutionExperience.Visibility = showExecution", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("PresentExecutionExperience(workflowState);", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("QueueSubtreeLocalization(ResultCard);", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("QueueSubtreeLocalization(ExecutionExperience);", StringComparison.Ordinal) &&
+       mainPageMigrationSource.Contains("AnimateWorkspacePhaseChange(showSelection, showExecution, showResult);", StringComparison.Ordinal),
+    "The migration workflow must project selection, review, and execution as separate animated workspace stages.");
+Assert(mainPageMigrationSource.Contains("UiText.Translate(workflowState.StatusText)", StringComparison.Ordinal),
+    "Completed migration announcements must use the active UI language.");
+var syncProgressSource = ExtractCSharpMethodBody(mainPageSource, "private void SetSyncProgressValue(");
+Assert(syncProgressSource.IndexOf("var currentValue = SyncProgressBar.Value;", StringComparison.Ordinal) <
+           syncProgressSource.IndexOf("_syncProgressStoryboard?.Stop();", StringComparison.Ordinal) &&
+       syncProgressSource.Contains("SyncProgressBar.Value = value;", StringComparison.Ordinal) &&
+       syncProgressSource.Contains("From = currentValue", StringComparison.Ordinal) &&
+       syncProgressSource.Contains("FillBehavior = FillBehavior.Stop", StringComparison.Ordinal),
+    "Header progress must continue from its presented value and commit the new base value without snapping backward.");
+var executionProgressSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void SetExecutionProgressValue(");
+Assert(executionProgressSource.IndexOf("var currentValue = ExecutionProgressBar.Value;", StringComparison.Ordinal) <
+           executionProgressSource.IndexOf("_executionProgressStoryboard?.Stop();", StringComparison.Ordinal) &&
+       executionProgressSource.Contains("ExecutionProgressBar.Value = value;", StringComparison.Ordinal) &&
+       executionProgressSource.Contains("From = currentValue", StringComparison.Ordinal) &&
+        executionProgressSource.Contains("FillBehavior = FillBehavior.Stop", StringComparison.Ordinal),
+    "Execution progress must continue from its presented value and commit the new base value without snapping backward.");
+Assert(syncProgressSource.Contains("_syncProgressAccumulator.Advance(value)", StringComparison.Ordinal) &&
+       syncProgressSource.Contains("_workflow?.State.IsMutationInProgress == true", StringComparison.Ordinal) &&
+       syncProgressSource.Contains("_executionProgressAccumulator.Current", StringComparison.Ordinal) &&
+       ExtractCSharpMethodBody(mainPageMigrationSource, "private void PresentExecutionExperience(")
+           .Contains("var displayedPercent = _executionProgressAccumulator.Advance(presentation.Percent);", StringComparison.Ordinal) &&
+       ExtractCSharpMethodBody(mainPageSource, "public void SetSyncPresentation(")
+           .Contains("_syncProgressAccumulator.Reset();", StringComparison.Ordinal) &&
+       ExtractCSharpMethodBody(mainPageMigrationSource, "private void PresentWorkflowState(")
+           .Contains("_executionProgressAccumulator.Reset();", StringComparison.Ordinal),
+    "Header and execution progress must reset only for a new operation and remain monotonic through rollback.");
+var syncPresentationActivitySource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "public void SetSyncPresentation(");
+Assert(syncPresentationActivitySource.Contains(
+           "PrimaryActionButton.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;",
+           StringComparison.Ordinal) &&
+       !syncPresentationActivitySource.Contains("PrimaryRunningContent", StringComparison.Ordinal) &&
+       !syncPresentationActivitySource.Contains("PrimaryProgressRing", StringComparison.Ordinal),
+    "A running home operation must use the stable status area and full-width progress bar instead of floating a redundant action over the decorative version.");
+var discoveryActivitySource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void SetDiscoveryActivity(");
+var drawerActivitySource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void SetDrawerActivity(");
+var executionActivitySource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void PresentExecutionExperience(");
+Assert(executionActivitySource.Contains(
+           "ExecutionPercentText.Text = presentation.IsIndeterminate",
+           StringComparison.Ordinal) &&
+       executionActivitySource.Contains(
+           "$\"{Math.Round(displayedPercent):0}%\"",
+           StringComparison.Ordinal) &&
+       executionActivitySource.Contains("SetExecutionProgressValue(displayedPercent);", StringComparison.Ordinal),
+    "The execution percentage label must avoid fake values for unknown waits and share determinate values with the main bar.");
+var workflowFooterSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void UpdateWorkflowFooter(");
+Assert(workflowFooterSource.Contains(
+           "var displayedPercent = migrationRunning",
+           StringComparison.Ordinal) &&
+       workflowFooterSource.Contains("_executionProgressAccumulator.Current", StringComparison.Ordinal) &&
+       workflowFooterSource.Contains("progressPresentation.StageText} · {Math.Round(displayedPercent):0}%", StringComparison.Ordinal) &&
+       workflowFooterSource.Contains("displayedPercent);", StringComparison.Ordinal),
+    "The footer label and bar must reuse the accumulated operation percentage instead of raw rollback progress.");
+Assert(executionActivitySource.Contains(
+           "ExecutionProgressBar.IsIndeterminate = continuousMotion && presentation.IsIndeterminate;",
+           StringComparison.Ordinal) &&
+       executionActivitySource.Contains(
+           "presentation.IsIndeterminate",
+           StringComparison.Ordinal) &&
+       syncPresentationActivitySource.Contains(
+           "running.IsIndeterminate",
+           StringComparison.Ordinal) &&
+       workflowFooterSource.Contains(
+           "progressPresentation.IsIndeterminate",
+           StringComparison.Ordinal),
+    "Execution, home status, and footer must share the same truthful indeterminate-progress decision.");
+Assert(syncPresentationActivitySource.Contains(
+           "PrimaryDoneText.Text = _viewState.IsDemo ? \"查看演示结果\" : \"查看同步结果\";",
+           StringComparison.Ordinal) &&
+       syncPresentationActivitySource.Contains(
+           "PrimaryActionButton.IsEnabled = true;",
+           StringComparison.Ordinal),
+    "Verified home completion must remain actionable so the user can reopen the result and undo details.");
+var presentWorkflowStateProgressSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void PresentWorkflowState(");
+Assert(presentWorkflowStateProgressSource.Contains(
+           "case MigrationWorkflowPhase.Discovering:",
+           StringComparison.Ordinal) &&
+       presentWorkflowStateProgressSource.Contains(
+           "new MigrationProgress(MigrationProgressStage.Revalidating, 0, 0, workflowState.StatusText)",
+           StringComparison.Ordinal),
+    "Read-only instance and catalog revalidation must project an explicit indeterminate progress state on the home surface.");
+foreach (var activitySource in new[]
+         {
+             syncPresentationActivitySource,
+             discoveryActivitySource,
+             drawerActivitySource,
+             executionActivitySource,
+         })
+{
+    Assert(activitySource.Contains("ContinuousMotionPolicy.Allows(", StringComparison.Ordinal) &&
+           activitySource.Contains("IsIndeterminate = continuousMotion", StringComparison.Ordinal),
+        "Every busy-state refresh must preserve reduced-motion and high-contrast animation suppression.");
+}
+var stageRailSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void UpdateWorkspaceStageRail(");
+Assert(stageRailSource.Contains("_highContrast ? 1", StringComparison.Ordinal) &&
+       stageRailSource.Contains("AutomationProperties.SetItemStatus", StringComparison.Ordinal) &&
+       stageRailSource.Contains("new Thickness(index == activeStep ? 2 : 1)", StringComparison.Ordinal) &&
+       stageRailSource.Contains("QueueSubtreeLocalization(WorkspaceStageRail);", StringComparison.Ordinal),
+    "The stage rail must retain high-contrast visibility and expose the active/completed/pending state to assistive technology.");
 var instancePickerHandlerSource = ExtractCSharpMethodBody(
     mainPageSource,
     "private async void InstancePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)");
@@ -841,6 +1371,153 @@ Assert(resultFocusIndex >= 0 &&
        !mainPageSource.Contains("_completionSound", StringComparison.Ordinal),
     "A read-only preview must focus and announce its result but stay silent until a verified transaction commits.");
 
+var executionHomeState = MigrationWorkflowState.Initial with
+{
+    Phase = MigrationWorkflowPhase.Executing,
+};
+var blockedAfterExecutionState = MigrationWorkflowState.Initial with
+{
+    Phase = MigrationWorkflowPhase.Blocked,
+};
+var recoveryAfterExecutionState = MigrationWorkflowState.Initial with
+{
+    Phase = MigrationWorkflowPhase.RecoveryRequired,
+};
+var succeededAfterExecutionState = MigrationWorkflowState.Initial with
+{
+    Phase = MigrationWorkflowPhase.Succeeded,
+    LastExecutionStatus = MigrationExecutionStatus.Succeeded,
+};
+Assert(ExecutionWorkspaceNavigationPolicy.Evaluate(
+           MigrationWorkflowPhase.Reviewing,
+           executionHomeState,
+           DrawerModalPhase.Open) == ExecutionWorkspaceNavigationAction.ShowHome &&
+       ExecutionWorkspaceNavigationPolicy.Evaluate(
+           MigrationWorkflowPhase.Executing,
+           succeededAfterExecutionState,
+           DrawerModalPhase.Collapsed) == ExecutionWorkspaceNavigationAction.None &&
+       ExecutionWorkspaceNavigationPolicy.Evaluate(
+           MigrationWorkflowPhase.Executing,
+           blockedAfterExecutionState,
+           DrawerModalPhase.Collapsed) == ExecutionWorkspaceNavigationAction.ShowWorkspace &&
+       ExecutionWorkspaceNavigationPolicy.Evaluate(
+           MigrationWorkflowPhase.Executing,
+           recoveryAfterExecutionState,
+           DrawerModalPhase.Closing) == ExecutionWorkspaceNavigationAction.ShowWorkspace &&
+       ExecutionWorkspaceNavigationPolicy.Evaluate(
+           MigrationWorkflowPhase.Selecting,
+           blockedAfterExecutionState,
+           DrawerModalPhase.Collapsed) == ExecutionWorkspaceNavigationAction.None,
+    "ExecutionWorkspaceNavigation: confirmed execution must continue on home, verified success must stay there, and mutation failures must restore the workspace.");
+Assert(MigrationWorkflowPolicy.CanReturnToSelection(
+           MigrationWorkflowPhase.Reviewing,
+           hasCatalogs: false,
+           isMutationInProgress: false) &&
+       MigrationWorkflowPolicy.CanReturnToSelection(
+           MigrationWorkflowPhase.Blocked,
+           hasCatalogs: true,
+           isMutationInProgress: false) &&
+       !MigrationWorkflowPolicy.CanReturnToSelection(
+           MigrationWorkflowPhase.Blocked,
+           hasCatalogs: false,
+           isMutationInProgress: false) &&
+       !MigrationWorkflowPolicy.CanReturnToSelection(
+           MigrationWorkflowPhase.Blocked,
+           hasCatalogs: true,
+           isMutationInProgress: true),
+    "BlockedSelectionRecovery: a stopped real workflow with retained catalogs must expose a safe route back to selection, while mutation and catalog-less states remain closed.");
+Assert(MigrationWorkflowPolicy.CanStartAnotherSync(
+           MigrationWorkflowPhase.Succeeded,
+           MigrationExecutionStatus.Succeeded,
+           hasDeferredJeiSync: false,
+           isMutationInProgress: false,
+           hasPair: true) &&
+       !MigrationWorkflowPolicy.CanStartAnotherSync(
+           MigrationWorkflowPhase.Succeeded,
+           MigrationExecutionStatus.Succeeded,
+           hasDeferredJeiSync: true,
+           isMutationInProgress: false,
+           hasPair: true) &&
+       !MigrationWorkflowPolicy.CanStartAnotherSync(
+           MigrationWorkflowPhase.Reviewing,
+           MigrationExecutionStatus.Succeeded,
+           hasDeferredJeiSync: false,
+           isMutationInProgress: false,
+           hasPair: true),
+    "RepeatSync: only a fully verified, non-deferred result with a retained pair may begin a fresh read-only revalidation cycle.");
+var presentWorkflowStateForNavigation = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void PresentWorkflowState(");
+Assert(presentWorkflowStateForNavigation.Contains(
+           "ExecutionWorkspaceNavigationPolicy.Evaluate(",
+           StringComparison.Ordinal) &&
+       presentWorkflowStateForNavigation.Contains(
+           "CloseDrawerForBackgroundExecution();",
+           StringComparison.Ordinal) &&
+       presentWorkflowStateForNavigation.Contains(
+           "OpenDrawerForWorkflowAttention();",
+           StringComparison.Ordinal),
+    "ExecutionWorkspaceNavigation: the live workflow projection must apply the tested home/attention policy.");
+var workflowResultProjectionSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void PresentWorkflowResult(");
+var modifySelectionClickSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void ModifySelectionButton_Click(");
+var blockedWorkflowFooterSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private void UpdateWorkflowFooter(");
+Assert(workflowResultProjectionSource.Contains(
+           "MigrationWorkflowPolicy.CanReturnToSelection(",
+           StringComparison.Ordinal) &&
+       modifySelectionClickSource.Contains(
+           "MigrationWorkflowPolicy.CanReturnToSelection(",
+           StringComparison.Ordinal),
+    "BlockedSelectionRecovery: both the result projection and its edit action must share the tested workflow policy.");
+Assert(blockedWorkflowFooterSource.Contains(
+           "case MigrationWorkflowPhase.Blocked when workflowState.Catalogs.Count > 0:",
+           StringComparison.Ordinal) &&
+       blockedWorkflowFooterSource.Contains(
+           "_contentSelectionViewModel.CaptureSelection()",
+           StringComparison.Ordinal) &&
+       blockedWorkflowFooterSource.Contains(
+           "!_contentSelectionViewModel.HasUnresolvedConflicts",
+           StringComparison.Ordinal),
+    "BlockedSelectionRecovery: a blocked workflow with retained catalogs must expose a read-only plan retry only for a valid conflict-free selection.");
+Assert(blockedWorkflowFooterSource.Contains(
+           "MigrationWorkflowPolicy.CanStartAnotherSync(",
+           StringComparison.Ordinal) &&
+       blockedWorkflowFooterSource.Contains(
+           "DryRunPreviewButton.Content = canStartAnotherSync ? \"再次同步\" : \"同步已验证\";",
+           StringComparison.Ordinal),
+    "RepeatSync: the completed result footer must turn its existing primary action into an explicit again-sync entry only when the policy allows it.");
+var prepareOrExecuteSource = ExtractCSharpMethodBody(
+    mainPageMigrationSource,
+    "private async Task PrepareOrExecuteWorkflowAsync(");
+Assert(prepareOrExecuteSource.Contains(
+           "MigrationWorkflowPolicy.CanStartAnotherSync(",
+           StringComparison.Ordinal) &&
+       prepareOrExecuteSource.Contains(
+           "await ChangeWorkflowPairAsync(sourceId, targetId);",
+           StringComparison.Ordinal),
+    "RepeatSync: activating the completed footer must re-open the retained pair through fresh read-only catalog preparation rather than reusing the old accepted plan.");
+var coordinatorSource = File.ReadAllText(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Services",
+    "MigrationWorkflowCoordinator.cs"));
+var prepareCatalogsSource = ExtractCSharpMethodBody(
+    coordinatorSource,
+    "private async Task PrepareCatalogsAsync(");
+Assert(prepareCatalogsSource.Contains(
+           "Phase = MigrationWorkflowPhase.Discovering,",
+           StringComparison.Ordinal) &&
+       prepareCatalogsSource.Contains(
+           "MigrationProgressStage.Revalidating",
+           StringComparison.Ordinal),
+    "RepeatSync: selecting the same pair again must publish read-only revalidation progress before exposing a new selection catalog.");
+
 var closeRequestMethod = typeof(DrawerModalLifecycleCoordinator).GetMethod(
     "RequestClose",
     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
@@ -880,6 +1557,16 @@ Assert(closeDrawerSource.Contains("_workflow?.State.IsMutationInProgress == true
        closeDrawerSource.Contains("_drawerLifecycle.RequestClose(isMutationInProgress)", StringComparison.Ordinal) &&
        closeDrawerSource.Contains("FocusDrawerLiveStatus();", StringComparison.Ordinal),
     "MutationDrawerDismissal: CloseDrawer itself must reject mutation-time requests and restore live-status focus.");
+var backgroundExecutionCloseSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void CloseDrawerForBackgroundExecution()");
+Assert(backgroundExecutionCloseSource.Contains(
+           "_workflow?.State.IsMutationInProgress != true",
+           StringComparison.Ordinal) &&
+       backgroundExecutionCloseSource.Contains(
+           "_drawerLifecycle.RequestClose(isMutationInProgress: false)",
+           StringComparison.Ordinal),
+    "ExecutionWorkspaceNavigation: only an active internal transaction projection may bypass the visible drawer-close guard to reveal home progress.");
 foreach (var (handlerName, signature) in new[]
          {
              ("DrawerCloseButton_Click", "private void DrawerCloseButton_Click(object sender, RoutedEventArgs e)"),
@@ -917,8 +1604,8 @@ Assert(drawerScrimElement.Attribute("Click") is null,
     "The drawer scrim must not retain a button click handler.");
 Assert((string?)drawerScrimElement.Attribute("AutomationProperties.AccessibilityView") == "Raw",
     "The drawer scrim must stay out of the accessibility control view.");
-Assert((string?)drawerScrimElement.Attribute("Background") == "#62000000",
-    "The drawer scrim must retain its stable modal background.");
+Assert((string?)drawerScrimElement.Attribute("Background") == "Transparent",
+    "The full-window migration workspace must not leave a brightening scrim over an inert side scene.");
 Assert((string?)drawerScrimElement.Attribute("IsTabStop") == "False",
     "The drawer scrim must remain outside keyboard tab navigation.");
 Assert((string?)drawerScrimElement.Attribute("IsHitTestVisible") == "True",
@@ -1301,29 +1988,38 @@ Assert(sound.Count == 2, "Exactly two distinct verified committed generations mu
 var presentWorkflowResultStart = mainPageMigrationSource.IndexOf(
     "private void PresentWorkflowResult(",
     StringComparison.Ordinal);
-var updateWorkflowFooterStart = mainPageMigrationSource.IndexOf(
-    "private void UpdateWorkflowFooter(",
+var presentCommittedHomeFeedbackStart = mainPageMigrationSource.IndexOf(
+    "private void PresentCommittedHomeFeedback(",
     presentWorkflowResultStart,
     StringComparison.Ordinal);
-Assert(presentWorkflowResultStart >= 0 && updateWorkflowFooterStart > presentWorkflowResultStart,
-    "CommittedPresentationProof: the production committed-result presenter must remain isolated for review.");
-var presentWorkflowResultSource = mainPageMigrationSource[presentWorkflowResultStart..updateWorkflowFooterStart];
-var committedResultPresentedIndex = presentWorkflowResultSource.IndexOf(
-    "var resultPresented = ResultCard.Visibility == Visibility.Visible;",
+var updateWorkflowFooterStart = mainPageMigrationSource.IndexOf(
+    "private void UpdateWorkflowFooter(",
+    presentCommittedHomeFeedbackStart,
     StringComparison.Ordinal);
-var committedFocusIndex = presentWorkflowResultSource.IndexOf(
-    "var focusAccepted = PreviewResultHeading.Focus(FocusState.Programmatic);",
+Assert(presentWorkflowResultStart >= 0 &&
+       presentCommittedHomeFeedbackStart > presentWorkflowResultStart &&
+       updateWorkflowFooterStart > presentCommittedHomeFeedbackStart,
+    "CommittedPresentationProof: review rendering and home completion feedback must remain isolated for review.");
+var presentWorkflowResultSource =
+    mainPageMigrationSource[presentWorkflowResultStart..presentCommittedHomeFeedbackStart];
+var committedHomeFeedbackSource =
+    mainPageMigrationSource[presentCommittedHomeFeedbackStart..updateWorkflowFooterStart];
+var committedResultPresentedIndex = committedHomeFeedbackSource.IndexOf(
+    "var resultPresented = _pageLoaded",
     StringComparison.Ordinal);
-var committedPeerIndex = presentWorkflowResultSource.IndexOf(
-    "FrameworkElementAutomationPeer.CreatePeerForElement(PreviewResultHeading)",
+var committedFocusIndex = committedHomeFeedbackSource.IndexOf(
+    "focusAccepted = PrimaryActionButton.Focus(FocusState.Programmatic);",
     StringComparison.Ordinal);
-var committedAnnouncementIndex = presentWorkflowResultSource.IndexOf(
+var committedPeerIndex = committedHomeFeedbackSource.IndexOf(
+    "FrameworkElementAutomationPeer.CreatePeerForElement(PrimaryActionButton)",
+    StringComparison.Ordinal);
+var committedAnnouncementIndex = committedHomeFeedbackSource.IndexOf(
     "peer.RaiseNotificationEvent(",
     StringComparison.Ordinal);
-var announcementAcceptedIndex = presentWorkflowResultSource.IndexOf(
+var announcementAcceptedIndex = committedHomeFeedbackSource.IndexOf(
     "notificationInvokedSuccessfully = true;",
     StringComparison.Ordinal);
-var committedSoundIndex = presentWorkflowResultSource.IndexOf(
+var committedSoundIndex = committedHomeFeedbackSource.IndexOf(
     "TryPlayCommittedSound(",
     StringComparison.Ordinal);
 Assert(committedResultPresentedIndex >= 0 &&
@@ -1332,8 +2028,36 @@ Assert(committedResultPresentedIndex >= 0 &&
        committedAnnouncementIndex > committedPeerIndex &&
        announcementAcceptedIndex > committedAnnouncementIndex &&
        committedSoundIndex > announcementAcceptedIndex &&
-       presentWorkflowResultSource.Contains("catch (Exception)", StringComparison.Ordinal),
-    "CommittedPresentationProof: presentation, accepted focus, valid peer, and nonthrowing UIA notification must precede the sound gate.");
+       committedHomeFeedbackSource.Contains("catch (Exception)", StringComparison.Ordinal) &&
+       !presentWorkflowResultSource.Contains("TryPlayCommittedSound(", StringComparison.Ordinal),
+    "CommittedPresentationProof: home presentation, accepted focus, valid peer, and nonthrowing UIA notification must precede the sound gate exactly once.");
+var completeDrawerCloseSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void CompleteDrawerClose(long generation)");
+var pageLoadedForCommittedSource = ExtractCSharpMethodBody(
+    mainPageSource,
+    "private void Page_Loaded(object sender, RoutedEventArgs e)");
+var drawerCollapsedIndex = completeDrawerCloseSource.IndexOf(
+    "DrawerLayer.Visibility = Visibility.Collapsed;",
+    StringComparison.Ordinal);
+var retryCommittedFeedbackIndex = completeDrawerCloseSource.IndexOf(
+    "RetryCommittedHomeFeedbackFromCurrentState();",
+    StringComparison.Ordinal);
+var reopenAttentionIndex = completeDrawerCloseSource.IndexOf(
+    "OpenDrawer(DrawerCloseButton);",
+    StringComparison.Ordinal);
+Assert(drawerCollapsedIndex >= 0 &&
+       retryCommittedFeedbackIndex > drawerCollapsedIndex &&
+       reopenAttentionIndex > retryCommittedFeedbackIndex,
+    "CommittedPresentationClosingRace: when a verified commit arrives during drawer closing, the collapsed home must retry focus, announcement, and the exactly-once completion sound before any failure-attention reopen.");
+Assert(pageLoadedForCommittedSource.Contains(
+           "RetryCommittedHomeFeedbackFromCurrentState();",
+           StringComparison.Ordinal) &&
+       committedHomeFeedbackSource.Contains("_pageLoaded", StringComparison.Ordinal) &&
+       committedHomeFeedbackSource.Contains(
+           "_drawerLifecycle.Phase == DrawerModalPhase.Collapsed",
+           StringComparison.Ordinal),
+    "CommittedPresentationSurface: unloaded pages must defer completion feedback until load, and the authoritative Collapsed lifecycle must agree with visibility.");
 
 var undoEligibilityGateType = typeof(MigrationWorkflowCoordinator).Assembly.GetType(
     "BlockFerry.App.WinUI.Services.UndoEligibilityRefreshGate",
@@ -1448,6 +2172,10 @@ Assert(mainWindowSource.Contains("Activated += MainWindow_Activated;", StringCom
        mainWindowSource.Contains("Activated -= MainWindow_Activated;", StringComparison.Ordinal) &&
        mainWindowSource.Contains("RefreshUndoEligibilityAsync(", StringComparison.Ordinal),
     "UndoEligibilityRefresh: window reactivation must trigger a fresh read-only Undo eligibility check.");
+Assert(mainWindowSource.Contains(
+           "AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;",
+           StringComparison.Ordinal),
+    "The custom title-bar actions must share the native tall caption-button baseline.");
 
 var demoCatalog = DemoOptionsSelectionData.CreateCatalog();
 Assert(demoCatalog.SelectableDifferences.Select(item => item.Key).SequenceEqual(
@@ -1782,6 +2510,19 @@ var workflowCoordinatorPath = Path.Combine(
 Assert(File.Exists(workflowCoordinatorPath),
     "RecoveryPrecedesDiscovery: the production workflow coordinator contract is missing.");
 var workflowCoordinatorSource = File.ReadAllText(workflowCoordinatorPath);
+var invalidateWorkflowPlanSource = ExtractCSharpMethodBody(
+    workflowCoordinatorSource,
+    "internal void InvalidatePlan()");
+Assert(invalidateWorkflowPlanSource.Contains(
+           "MigrationWorkflowPolicy.CanReturnToSelection(",
+           StringComparison.Ordinal) &&
+       invalidateWorkflowPlanSource.Contains(
+           "ReviewItems = Array.Empty<ContentPlanItem>()",
+           StringComparison.Ordinal) &&
+       invalidateWorkflowPlanSource.Contains("PlannedFileCount = 0", StringComparison.Ordinal) &&
+       invalidateWorkflowPlanSource.Contains("PlannedItemCount = 0", StringComparison.Ordinal) &&
+       invalidateWorkflowPlanSource.Contains("CanExecute = false", StringComparison.Ordinal),
+    "BlockedSelectionRecovery: returning from a failed review must discard only the accepted plan and stale review while preserving the retained catalogs for a fresh read-only check.");
 Assert(workflowCoordinatorSource.Contains(
            "string.IsNullOrWhiteSpace(result.Message)",
            StringComparison.Ordinal) &&
@@ -1910,8 +2651,44 @@ string[] expectedReviewTitles = ["新增", "更新", "相同", "未选择", "受
 Assert(reviewGroups.Select(group => group.Title).SequenceEqual(
            expectedReviewTitles) &&
        reviewGroups.All(group => group.Count == 1) &&
-       reviewGroups[0].Items.Single().Summary == ContentUiText.HiddenTechnicalText,
+       reviewGroups[0].Bundles.Single().Items.Single().Summary == ContentUiText.HiddenTechnicalText,
     "ReviewCardsGroupAndSanitize: review rows must use stable groups and never expose rooted technical values.");
+
+Assert(ContentItemId.TryCreate("vanilla", "lang", out var reviewLanguageId),
+    "The grouped language review fixture must use a valid bounded ID.");
+Assert(ContentItemId.TryCreate("vanilla", "guiScale", out var reviewGuiScaleId),
+    "The grouped display review fixture must use a valid bounded ID.");
+Assert(ContentItemId.TryCreate("appearance", "dark-mode", out var reviewAppearanceId),
+    "The grouped appearance review fixture must use a valid bounded ID.");
+var bundledReview = MigrationReviewPresenter.Build(
+[
+    ContentPlanItem.Create(
+        reviewLanguageId,
+        PlannedContentDisposition.Add,
+        ConflictResolution.Skip,
+        "将新增到目标"),
+    ContentPlanItem.Create(
+        reviewGuiScaleId,
+        PlannedContentDisposition.Add,
+        ConflictResolution.Skip,
+        "将新增到目标"),
+    ContentPlanItem.Create(
+        reviewAppearanceId,
+        PlannedContentDisposition.Add,
+        ConflictResolution.Skip,
+        "将新增到目标"),
+]);
+var bundledAddGroup = bundledReview.Single();
+Assert(bundledAddGroup.Title == "新增" &&
+       bundledAddGroup.Count == 3 &&
+       bundledAddGroup.Bundles.Count == 3 &&
+       bundledAddGroup.Bundles.Select(bundle => bundle.Title).SequenceEqual(
+           ["语言与界面", "声音与显示", "界面外观"]),
+    "ReviewCardsBundleByCategory: repeated rows must collapse into stable, user-facing setting categories.");
+Assert(bundledAddGroup.Bundles[0].Items.Single().Title == "语言 · lang" &&
+       bundledAddGroup.Bundles[1].Items.Single().Title == "GUI 缩放 · guiScale" &&
+       bundledAddGroup.Bundles[2].Items.Single().Title == "深色模式",
+    "ReviewCardsExposeClearDetails: expanded rows must identify the setting instead of repeating the same action label.");
 
 Assert(SemanticVersion.TryParse("v0.1.0-beta.4", out var beta4) &&
        SemanticVersion.TryParse("0.1.0-beta.5", out var beta5) &&
@@ -2014,7 +2791,6 @@ static void ProductionStartsAwaitingDiscovery(XDocument markup, XNamespace xamlN
     var progress = RequireNamedElement(markup, xamlNamespace, "SyncProgressBar");
     var primaryAction = RequireNamedElement(markup, xamlNamespace, "PrimaryActionButton");
     var primaryIdleText = RequireNamedElement(markup, xamlNamespace, "PrimaryIdleText");
-    var primaryRunningContent = RequireNamedElement(markup, xamlNamespace, "PrimaryRunningContent");
     var drawerStatus = RequireNamedElement(markup, xamlNamespace, "DrawerHeaderStatusText");
     Assert((string?)headerContext.Attribute("Text") == "等待发现实例 · PCL 2" &&
            (string?)modeLabel.Attribute("Text") == "等待发现实例" &&
@@ -2029,15 +2805,19 @@ static void ProductionStartsAwaitingDiscovery(XDocument markup, XNamespace xamlN
                (string?)element.Attribute(xamlNamespace + "Name") == "PrimaryActionButton") == 1,
         "ProductionStartsAwaitingDiscovery: ActionDock must expose one synchronization entry and no duplicate source/details controls.");
     Assert((string?)progress.Attribute("AutomationProperties.Name") == "同步准备与执行进度" &&
+           (string?)progress.Attribute("Grid.Row") == "2" &&
+           (string?)progress.Attribute("Grid.Column") == "0" &&
+           (string?)progress.Attribute("Grid.ColumnSpan") == "5" &&
+           (string?)progress.Attribute("Height") == "4" &&
            (string?)primaryAction.Attribute("AutomationProperties.Name") == "打开同步设置选择" &&
            (string?)primaryAction.Attribute("AutomationProperties.HelpText") ==
                "请先发现并选择两个不同实例，再选择内容并检查最终清单" &&
            (string?)primaryIdleText.Attribute("Text") == "选择同步设置" &&
-           (string?)primaryRunningContent.Descendants()
-               .Single(element => element.Name.LocalName == "TextBlock")
-               .Attribute("Text") == "正在处理" &&
+           !markup.Descendants().Any(element =>
+               (string?)element.Attribute(xamlNamespace + "Name") is
+                   "PrimaryRunningContent" or "PrimaryProgressRing") &&
            (string?)drawerStatus.Attribute("Text") == "等待发现实例 · 0 写入",
-        "ProductionStartsAwaitingDiscovery: initial accessible copy must describe discovery and the real review workflow rather than demo sync.");
+        "ProductionStartsAwaitingDiscovery: initial copy must describe the real review workflow, with one full-width progress lane and no floating busy action.");
 
     var automaticButton = RequireNamedElement(markup, xamlNamespace, "AutomaticDiscoveryButton");
     var pickerButton = RequireNamedElement(markup, xamlNamespace, "FolderPickerButton");
@@ -2328,6 +3108,21 @@ static void ContentAdapterSelectionContracts()
     Assert(missingRuntimeScopeSelection.Cards[2].DisabledReason ==
            "目标中没有可唯一对应的收藏作用域，请检查实例后重新探测",
         "A missing JEI runtime scope must explain the ambiguous mapping without requiring target initialization.");
+
+    var safeAllSelection = new ContentSelectionViewModel(catalogs);
+    var safeAllChangeCount = 0;
+    safeAllSelection.SelectionChanged += (_, _) => safeAllChangeCount++;
+    Assert(safeAllSelection.HasUnselectedSafeItems,
+        "SelectAllSafeItems: a fresh explicit-selection model must report its unselected safe items.");
+    safeAllSelection.SelectAllSafeItems();
+    var safeAllCaptured = safeAllSelection.CaptureSelection();
+    Assert(safeAllChangeCount == 1 &&
+           !safeAllSelection.HasUnselectedSafeItems &&
+           safeAllCaptured.SelectedItems.SetEquals(
+               new[] { vanillaItem.Id, appearanceItem.Id, esmItem.Id }) &&
+           safeAllCaptured.ConflictResolutions.TryGetValue(jeiItem.Id, out var safeResolution) &&
+           safeResolution == ConflictResolution.KeepTarget,
+        "SelectAllSafeItems: one bulk action must select every conflict-free item exactly once while leaving explicit conflicts at their existing safe resolution.");
 
     var changeCount = 0;
     selection.SelectionChanged += (_, _) => changeCount++;

@@ -9,6 +9,7 @@
     xmlns:local="using:BlockFerry.App.WinUI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Background="Transparent"
+    FontFamily="{StaticResource AppFontFamily}"
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
@@ -41,12 +42,14 @@
             <Grid.RenderTransform>
                 <TranslateTransform x:Name="SceneTranslate" />
             </Grid.RenderTransform>
-            <StackPanel Margin="48,27,48,0"
+            <StackPanel x:Name="SceneHeaderPanel"
+                        Margin="48,27,48,0"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Top"
                         Orientation="Horizontal"
                         Spacing="12">
-                <TextBlock VerticalAlignment="Center"
+                <TextBlock x:Name="SceneHeaderTitleText"
+                           VerticalAlignment="Center"
                            FontSize="15"
                            FontWeight="Bold"
                            Foreground="{ThemeResource SceneTextBrush}"
@@ -80,7 +83,7 @@
                            FontSize="48"
                            Foreground="{ThemeResource SceneSecondaryTextBrush}"
                            CharacterSpacing="-35">
-                    <Run Text="从 " />
+                    <Run x:Name="SourcePrefixRun" Text="从 " />
                     <Run x:Name="SourceVersionRun" Text="未选择" />
                 </TextBlock>
                 <TextBlock x:Name="TargetVersionLine"
@@ -89,7 +92,7 @@
                            FontSize="56"
                            Foreground="{ThemeResource SceneTextBrush}"
                            CharacterSpacing="-42">
-                    <Run Text="到 " />
+                    <Run x:Name="TargetPrefixRun" Text="到 " />
                     <Run x:Name="TargetVersionRun" Text="未选择" />
                 </TextBlock>
                 <TextBlock x:Name="PackNameText"
@@ -99,7 +102,8 @@
                            Foreground="{ThemeResource SceneTextBrush}"
                            CharacterSpacing="-25"
                            Text="等待发现实例" />
-                <TextBlock Margin="0,6,0,0"
+                <TextBlock x:Name="SceneTaglineText"
+                           Margin="0,6,0,0"
                            FontSize="13"
                            FontWeight="SemiBold"
                            Foreground="{ThemeResource SceneSecondaryTextBrush}"
@@ -118,8 +122,8 @@
                   VerticalAlignment="Bottom">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="3" />
+                    <RowDefinition Height="10" />
+                    <RowDefinition Height="4" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
@@ -186,9 +190,11 @@
                 </Grid>
 
                 <ProgressBar x:Name="SyncProgressBar"
-                             Grid.Row="0"
-                             Grid.Column="2"
-                             Height="3"
+                             Grid.Row="2"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="5"
+                             Height="4"
+                             HorizontalAlignment="Stretch"
                              VerticalAlignment="Center"
                              AutomationProperties.Name="同步准备与执行进度"
                              Background="{ThemeResource ProgressTrackBrush}"
@@ -212,19 +218,6 @@
                             <FontIcon VerticalAlignment="Center" FontSize="20" Glyph="&#xE72A;" />
                             <TextBlock x:Name="PrimaryIdleText" VerticalAlignment="Center" Text="选择同步设置" />
                         </StackPanel>
-                        <StackPanel x:Name="PrimaryRunningContent"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Visibility="Collapsed">
-                            <ProgressRing x:Name="PrimaryProgressRing"
-                                          Width="18"
-                                          Height="18"
-                                          VerticalAlignment="Center"
-                                          AutomationProperties.AccessibilityView="Raw"
-                                          Foreground="White"
-                                          IsActive="False" />
-                            <TextBlock VerticalAlignment="Center" Text="正在处理" />
-                        </StackPanel>
                         <StackPanel x:Name="PrimaryDoneContent"
                                     Orientation="Horizontal"
                                     Spacing="8"
@@ -239,24 +232,23 @@
 
         <Grid x:Name="DrawerLayer"
               Canvas.ZIndex="50"
-              AutomationProperties.Name="选择同步设置"
+              AutomationProperties.Name="迁移工作区"
               Visibility="Collapsed">
             <Grid x:Name="DrawerScrim"
                   HorizontalAlignment="Stretch"
                   VerticalAlignment="Stretch"
                   AutomationProperties.AccessibilityView="Raw"
-                  Background="#62000000"
+                  Background="Transparent"
                   Tapped="DrawerScrim_Tapped"
                   IsHitTestVisible="True"
                   IsTabStop="False"
                   Opacity="0" />
 
             <Border x:Name="DrawerPanel"
-                    Width="420"
-                    HorizontalAlignment="Right"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
                     Background="{ThemeResource DrawerAcrylicBrush}"
-                    BorderBrush="{ThemeResource SubtleStrokeBrush}"
-                    BorderThickness="1,0,0,0">
+                    BorderThickness="0">
                 <Border.TabFocusNavigation>Cycle</Border.TabFocusNavigation>
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="DrawerTranslate" />
@@ -271,28 +263,37 @@
 
                     <StackPanel x:Name="DrawerHeaderPanel"
                                 Grid.Row="0"
-                                Padding="20,18,14,14"
-                                Spacing="12">
+                                MaxWidth="1040"
+                                Padding="30,22,30,16"
+                                HorizontalAlignment="Stretch"
+                                Spacing="14">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center"
-                                       FontSize="22"
+                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                <TextBlock x:Name="DrawerEyebrowText"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource OptionCardIconForegroundBrush}"
+                                           Text="BLOCKFERRY · 安全迁移" />
+                                <TextBlock x:Name="DrawerWorkspaceTitleText"
+                                           FontSize="26"
                                        FontWeight="Bold"
                                        Foreground="{ThemeResource DrawerTextBrush}"
-                                       Text="选择同步设置" />
+                                           Text="迁移工作区" />
+                            </StackPanel>
                             <Button x:Name="DrawerCloseButton"
                                     Grid.Column="1"
                                     Width="44"
                                     Height="44"
-                                    AutomationProperties.HelpText="安全事务进行中时此面板必须保持打开；完成提交或回滚后可关闭"
+                                    AutomationProperties.HelpText="同步会在主页继续显示进度；事务完成前请保持程序打开"
                                     AutomationProperties.ItemStatus="可以关闭"
-                                    AutomationProperties.Name="关闭设置选择"
+                                    AutomationProperties.Name="返回主页"
                                     Click="DrawerCloseButton_Click"
                                     Style="{StaticResource ChromeIconButtonStyle}">
-                                <FontIcon FontSize="18" Glyph="&#xE711;" />
+                                <FontIcon FontSize="18" Glyph="&#xE72B;" />
                             </Button>
                         </Grid>
                         <TextBlock x:Name="DrawerHeaderStatusText"
@@ -301,84 +302,160 @@
                                     Foreground="{ThemeResource DrawerSecondaryTextBrush}"
                                     Text="等待发现实例 · 0 写入"
                                     TextWrapping="Wrap" />
-                        <Border x:Name="RouteCard"
-                                Padding="14"
-                                Background="{ThemeResource SubtleSurfaceBrush}"
-                                BorderBrush="{ThemeResource SubtleStrokeBrush}"
-                                BorderThickness="1"
-                                CornerRadius="16">
-                            <Grid x:Name="RouteFieldsGrid" ColumnSpacing="10" RowSpacing="8">
+                        <Grid x:Name="WorkspaceStageRail" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="WorkspaceSelectStep"
+                                    Padding="12,9"
+                                    Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
+                                    BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="11">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock FontWeight="Bold" Text="1" />
+                                    <TextBlock x:Name="WorkspaceSelectStepText"
+                                               FontWeight="SemiBold"
+                                               Text="选择内容" />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="WorkspaceReviewStep"
+                                    Grid.Column="1"
+                                    Padding="12,9"
+                                    Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
+                                    BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="11"
+                                    Opacity="0.46">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock FontWeight="Bold" Text="2" />
+                                    <TextBlock x:Name="WorkspaceReviewStepText"
+                                               FontWeight="SemiBold"
+                                               Text="审核清单" />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="WorkspaceExecuteStep"
+                                    Grid.Column="2"
+                                    Padding="12,9"
+                                    Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
+                                    BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="11"
+                                    Opacity="0.46">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock FontWeight="Bold" Text="3" />
+                                    <TextBlock x:Name="WorkspaceExecuteStepText"
+                                               FontWeight="SemiBold"
+                                               Text="执行与验证" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalContentAlignment="Stretch"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  HorizontalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Auto">
+                        <Grid x:Name="DrawerBodyPanel"
+                              MaxWidth="1040"
+                              Padding="30,6,30,26"
+                              HorizontalAlignment="Center">
+                            <Grid x:Name="WorkspaceSelectionLayout"
+                                  ColumnSpacing="22"
+                                  RowSpacing="18">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="WorkspaceSelectionTranslate" />
+                                </Grid.RenderTransform>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="300" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <Grid x:Name="SourceRouteField" Grid.Row="0" Grid.Column="0" ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <SymbolIcon VerticalAlignment="Center"
-                                                AutomationProperties.AccessibilityView="Raw"
-                                                IsHitTestVisible="False"
-                                                Symbol="Folder" />
-                                    <ComboBox x:Name="SourceInstancePicker"
-                                              Grid.Column="1"
-                                              MinHeight="44"
-                                              HorizontalAlignment="Stretch"
-                                              AutomationProperties.Name="来源实例"
-                                              Header="来源"
-                                              SelectionChanged="InstancePicker_SelectionChanged" />
-                                </Grid>
-                                <SymbolIcon x:Name="RouteDirectionIcon"
-                                            Grid.Row="0"
-                                            Grid.Column="1"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
-                                            IsHitTestVisible="False"
-                                            Symbol="Forward" />
-                                <Grid x:Name="TargetRouteField" Grid.Row="0" Grid.Column="2" ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <SymbolIcon VerticalAlignment="Center"
-                                                AutomationProperties.AccessibilityView="Raw"
-                                                IsHitTestVisible="False"
-                                                Symbol="Download" />
-                                    <ComboBox x:Name="TargetInstancePicker"
-                                              Grid.Column="1"
-                                              MinHeight="44"
-                                              HorizontalAlignment="Stretch"
-                                              AutomationProperties.Name="目标实例"
-                                              Header="目标"
-                                              SelectionChanged="InstancePicker_SelectionChanged" />
-                                </Grid>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
 
-                    <ScrollViewer Grid.Row="1"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  HorizontalScrollMode="Disabled"
-                                  VerticalScrollBarVisibility="Auto"
-                                  VerticalScrollMode="Auto">
-                        <StackPanel x:Name="DrawerBodyPanel"
-                                    Padding="18,4,18,18"
-                                    Spacing="12">
-                            <Border x:Name="DiscoveryCard"
+                                <StackPanel x:Name="WorkspaceGuideColumn"
+                                            Grid.Row="0"
+                                            Grid.Column="0"
+                                            Spacing="14">
+                                    <Border x:Name="RouteCard"
+                                            Padding="16"
+                                            Background="{ThemeResource SubtleSurfaceBrush}"
+                                            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="16">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock FontSize="15"
+                                                       FontWeight="Bold"
+                                                       Foreground="{ThemeResource DrawerTextBrush}"
+                                                       Text="来源与目标" />
+                                            <Grid x:Name="RouteFieldsGrid" RowSpacing="6">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <Grid x:Name="SourceRouteField" Grid.Row="0" ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <SymbolIcon VerticalAlignment="Center"
+                                                                AutomationProperties.AccessibilityView="Raw"
+                                                                IsHitTestVisible="False"
+                                                                Symbol="Folder" />
+                                                    <ComboBox x:Name="SourceInstancePicker"
+                                                              Grid.Column="1"
+                                                              MinHeight="44"
+                                                              HorizontalAlignment="Stretch"
+                                                              AutomationProperties.Name="来源实例"
+                                                              Header="来源"
+                                                              SelectionChanged="InstancePicker_SelectionChanged" />
+                                                </Grid>
+                                                <SymbolIcon x:Name="RouteDirectionIcon"
+                                                            Grid.Row="1"
+                                                            Margin="31,0,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            IsHitTestVisible="False"
+                                                            Symbol="Forward">
+                                                    <SymbolIcon.RenderTransform>
+                                                        <RotateTransform Angle="90" />
+                                                    </SymbolIcon.RenderTransform>
+                                                </SymbolIcon>
+                                                <Grid x:Name="TargetRouteField" Grid.Row="2" ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <SymbolIcon VerticalAlignment="Center"
+                                                                AutomationProperties.AccessibilityView="Raw"
+                                                                IsHitTestVisible="False"
+                                                                Symbol="Download" />
+                                                    <ComboBox x:Name="TargetInstancePicker"
+                                                              Grid.Column="1"
+                                                              MinHeight="44"
+                                                              HorizontalAlignment="Stretch"
+                                                              AutomationProperties.Name="目标实例"
+                                                              Header="目标"
+                                                              SelectionChanged="InstancePicker_SelectionChanged" />
+                                                </Grid>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border x:Name="DiscoveryCard"
                                      Padding="14"
                                      Background="{ThemeResource SubtleSurfaceBrush}"
                                      BorderBrush="{ThemeResource SubtleStrokeBrush}"
                                      BorderThickness="1"
                                      CornerRadius="16"
-                                     Visibility="Visible">
+                                            Visibility="Visible">
                                 <StackPanel Spacing="10">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <SymbolIcon VerticalAlignment="Center"
@@ -392,14 +469,21 @@
                                                    Foreground="{ThemeResource DrawerTextBrush}"
                                                    Text="只读发现 PCL2 实例" />
                                     </StackPanel>
-                                    <Grid ColumnSpacing="8">
+                                            <Grid x:Name="DiscoveryActionsGrid" ColumnSpacing="8" RowSpacing="8">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <Button x:Name="AutomaticDiscoveryButton"
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                                <Button x:Name="AutomaticDiscoveryButton"
+                                                Grid.Row="0"
                                                 Grid.Column="0"
+                                                Grid.ColumnSpan="3"
                                                 MinHeight="44"
                                                 HorizontalAlignment="Stretch"
                                                 AutomationProperties.HelpText="只检查受保护的最近位置、当前用户常见 Minecraft 目录和已验证的 PCL 快捷方式"
@@ -408,8 +492,9 @@
                                                 Content="自动探测"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 UseSystemFocusVisuals="True" />
-                                        <Button x:Name="FolderPickerButton"
-                                                Grid.Column="1"
+                                                <Button x:Name="FolderPickerButton"
+                                                Grid.Row="1"
+                                                Grid.Column="0"
                                                 MinHeight="44"
                                                 HorizontalAlignment="Stretch"
                                                 AutomationProperties.HelpText="选择 PCL 文件夹、.minecraft、versions 或具体实例文件夹"
@@ -417,8 +502,10 @@
                                                 Click="FolderPickerButton_Click"
                                                 Content="选择文件夹"
                                                 UseSystemFocusVisuals="True" />
-                                        <Button x:Name="DemoModeButton"
-                                                Grid.Column="2"
+                                                <Button x:Name="DemoModeButton"
+                                                Grid.Row="1"
+                                                Grid.Column="1"
+                                                Grid.ColumnSpan="2"
                                                 MinHeight="44"
                                                 AutomationProperties.HelpText="使用内存中的固定示例，不访问 Minecraft 或 PCL 文件"
                                                 AutomationProperties.Name="试用演示数据"
@@ -435,10 +522,28 @@
                                             <TranslateTransform x:Name="ScanStatusTranslate" />
                                         </TextBlock.RenderTransform>
                                     </TextBlock>
+                                    <Grid x:Name="DiscoveryProgressPanel"
+                                          ColumnSpacing="10"
+                                          Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <ProgressRing x:Name="DiscoveryProgressRing"
+                                                      Width="18"
+                                                      Height="18"
+                                                      IsActive="False" />
+                                        <ProgressBar x:Name="DiscoveryProgressBar"
+                                                     Grid.Column="1"
+                                                     Height="4"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Center"
+                                                     IsIndeterminate="True" />
+                                    </Grid>
                                 </StackPanel>
-                            </Border>
+                                    </Border>
 
-                            <Border x:Name="RecoveryCard"
+                                    <Border x:Name="RecoveryCard"
                                     Padding="14"
                                     Background="{ThemeResource SubtleSurfaceBrush}"
                                     BorderBrush="{ThemeResource WarningBrush}"
@@ -482,23 +587,45 @@
                                                 Style="{StaticResource QuietButtonStyle}" />
                                     </StackPanel>
                                 </StackPanel>
-                            </Border>
+                                    </Border>
 
-                            <TextBlock x:Name="SafetyBoundaryText"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource DrawerSecondaryTextBrush}"
-                                       Text="发现与选择阶段只读；确认最终清单后才会先备份再同步。"
-                                       TextWrapping="Wrap" />
+                                    <Border x:Name="SafetyBoundaryCard"
+                                            Padding="14"
+                                            Background="{ThemeResource OptionLockedSafetyStripBrush}"
+                                            BorderBrush="{ThemeResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="14">
+                                        <StackPanel Spacing="7">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <SymbolIcon Foreground="{ThemeResource WarningBrush}" Symbol="ProtectedDocument" />
+                                                <TextBlock FontSize="14"
+                                                           FontWeight="Bold"
+                                                           Foreground="{ThemeResource DrawerTextBrush}"
+                                                           Text="安全边界" />
+                                            </StackPanel>
+                                            <TextBlock x:Name="SafetyBoundaryText"
+                                                       FontSize="12"
+                                                       Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                                       Text="发现与选择阶段只读；确认最终清单后才会先备份再同步。"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
 
-                            <Grid x:Name="OptionsSelectionPanel">
-                                <controls:OptionsSelectionControl x:Name="OptionsSelectionControl"
-                                                                  SelectionChanged="OptionsSelectionControl_SelectionChanged" />
-                            </Grid>
+                                <StackPanel x:Name="WorkspaceStageColumn"
+                                            Grid.Row="0"
+                                            Grid.Column="1"
+                                            Spacing="14">
+                                    <Grid x:Name="OptionsSelectionPanel">
+                                        <controls:OptionsSelectionControl x:Name="OptionsSelectionControl"
+                                                                  SelectionChanged="OptionsSelectionControl_SelectionChanged"
+                                                                  SelectAllRequested="OptionsSelectionControl_SelectAllRequested" />
+                                    </Grid>
 
-                            <StackPanel x:Name="ContentSelectionSection"
-                                        Spacing="8">
-                                <TextBlock FontSize="18"
-                                           FontWeight="SemiBold"
+                                    <StackPanel x:Name="ContentSelectionSection"
+                                         Spacing="10">
+                                <TextBlock FontSize="20"
+                                           FontWeight="Bold"
                                            Foreground="{ThemeResource DrawerTextBrush}"
                                            Text="模组设置" />
                                 <TextBlock FontSize="12"
@@ -506,10 +633,10 @@
                                            Text="界面外观、JEI 收藏与静音规则独立选择；展开卡片可处理单项冲突。"
                                            TextWrapping="Wrap" />
                                 <StackPanel x:Name="ContentAdapterCardsPanel"
-                                            Spacing="8" />
-                            </StackPanel>
+                                            Spacing="10" />
+                                    </StackPanel>
 
-                            <Border x:Name="ErrorCard"
+                                    <Border x:Name="ErrorCard"
                                      Padding="14"
                                      Background="{ThemeResource SubtleSurfaceBrush}"
                                      BorderBrush="{ThemeResource WarningBrush}"
@@ -545,10 +672,150 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border x:Name="ExecutionExperience"
+                                    Padding="28"
+                                    Background="{ThemeResource SubtleSurfaceBrush}"
+                                    BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="20"
+                                    Visibility="Collapsed">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="ExecutionExperienceTranslate" />
+                                </Border.RenderTransform>
+                                <StackPanel Spacing="22">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="56"
+                                                Height="56"
+                                                Background="{ThemeResource OptionCardIconSurfaceBrush}"
+                                                CornerRadius="18">
+                                            <ProgressRing x:Name="ExecutionActivityRing"
+                                                          Width="26"
+                                                          Height="26"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          IsActive="False" />
+                                        </Border>
+                                        <StackPanel x:Name="ExecutionStageTextHost"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="4">
+                                            <StackPanel.RenderTransform>
+                                                <TranslateTransform x:Name="ExecutionStageTextTranslate" />
+                                            </StackPanel.RenderTransform>
+                                            <TextBlock x:Name="ExecutionStageTitleText"
+                                                       FontSize="24"
+                                                       FontWeight="Bold"
+                                                       Foreground="{ThemeResource DrawerTextBrush}"
+                                                       Text="正在执行安全迁移" />
+                                            <TextBlock x:Name="ExecutionStageDetailText"
+                                                       FontSize="13"
+                                                       Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                                       Text="正在重新核对来源、目标和同步清单"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="ExecutionPercentText"
+                                                   Grid.Column="2"
+                                                   VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource DisplayFontFamily}"
+                                                   FontSize="28"
+                                                   FontWeight="Bold"
+                                                   Foreground="{ThemeResource DrawerTextBrush}"
+                                                   Text="0%" />
+                                    </Grid>
+
+                                    <ProgressBar x:Name="ExecutionProgressBar"
+                                                 Height="7"
+                                                 HorizontalAlignment="Stretch"
+                                                 Background="{ThemeResource ProgressTrackBrush}"
+                                                 Maximum="100"
+                                                 Minimum="0"
+                                                 Value="0" />
+
+                                    <Grid x:Name="ExecutionStepsGrid" ColumnSpacing="10" RowSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Border x:Name="ExecutionCheckStep"
+                                                Padding="12"
+                                                Background="{ThemeResource OptionCategorySelectedSurfaceBrush}"
+                                                BorderBrush="{ThemeResource OptionCardSelectedStrokeBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12">
+                                            <StackPanel Spacing="4">
+                                                <FontIcon HorizontalAlignment="Left" FontSize="18" Glyph="&#xE9D5;" />
+                                                <TextBlock FontWeight="Bold" Text="重新核对" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="ExecutionBackupStep"
+                                                Grid.Column="1"
+                                                Padding="12"
+                                                Background="{ThemeResource SubtleSurfaceBrush}"
+                                                BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12"
+                                                Opacity="0.38">
+                                            <StackPanel Spacing="4">
+                                                <FontIcon HorizontalAlignment="Left" FontSize="18" Glyph="&#xE74E;" />
+                                                <TextBlock FontWeight="Bold" Text="创建还原点" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="ExecutionCommitStep"
+                                                Grid.Column="2"
+                                                Padding="12"
+                                                Background="{ThemeResource SubtleSurfaceBrush}"
+                                                BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12"
+                                                Opacity="0.38">
+                                            <StackPanel Spacing="4">
+                                                <FontIcon HorizontalAlignment="Left" FontSize="18" Glyph="&#xE898;" />
+                                                <TextBlock FontWeight="Bold" Text="写入设置" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="ExecutionVerifyStep"
+                                                Grid.Column="3"
+                                                Padding="12"
+                                                Background="{ThemeResource SubtleSurfaceBrush}"
+                                                BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12"
+                                                Opacity="0.38">
+                                            <StackPanel Spacing="4">
+                                                <FontIcon HorizontalAlignment="Left" FontSize="18" Glyph="&#xE73E;" />
+                                                <TextBlock FontWeight="Bold" Text="复读验证" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                    <Border Padding="14"
+                                            Background="{ThemeResource OptionLockedSafetyStripBrush}"
+                                            CornerRadius="12">
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                                   Text="事务进行期间请保持 Minecraft 关闭。发生问题时会自动回滚，不会留下半完成状态。"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
                             </Border>
 
                             <Border x:Name="ResultCard"
-                                     Padding="14"
+                                     Padding="24"
                                      Background="{ThemeResource SubtleSurfaceBrush}"
                                      BorderBrush="{ThemeResource SubtleStrokeBrush}"
                                      BorderThickness="1"
@@ -599,13 +866,17 @@
                                             Visibility="Collapsed" />
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
+                        </Grid>
                     </ScrollViewer>
 
-                    <Grid x:Name="DrawerFooterGrid"
-                          Grid.Row="2"
-                          Padding="18,14,18,18"
-                          Background="{ThemeResource DrawerSurfaceBrush}"
+                    <Border Grid.Row="2"
+                            Background="{ThemeResource DrawerSurfaceBrush}"
+                            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                            BorderThickness="0,1,0,0">
+                        <Grid x:Name="DrawerFooterGrid"
+                          MaxWidth="1040"
+                          Padding="30,15,30,18"
+                          HorizontalAlignment="Stretch"
                           ColumnSpacing="12"
                           RowSpacing="10">
                         <Grid.ColumnDefinitions>
@@ -615,6 +886,8 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <ContentControl x:Name="FooterStatusHost"
                                         Grid.Row="0"
@@ -622,12 +895,27 @@
                                         AutomationProperties.Name="当前安全阶段与进度"
                                         IsTabStop="True"
                                         UseSystemFocusVisuals="True">
-                            <TextBlock x:Name="SelectedCountFooterText"
-                                       VerticalAlignment="Center"
-                                       AutomationProperties.LiveSetting="Polite"
-                                       Foreground="{ThemeResource DrawerSecondaryTextBrush}"
-                                       Text="正在准备可选设置…"
-                                       TextWrapping="Wrap" />
+                            <Grid ColumnSpacing="9">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ProgressRing x:Name="DrawerActivityRing"
+                                              Width="18"
+                                              Height="18"
+                                              VerticalAlignment="Center"
+                                              IsActive="False"
+                                              Visibility="Collapsed" />
+                                <TextBlock x:Name="SelectedCountFooterText"
+                                           Grid.Column="1"
+                                           VerticalAlignment="Center"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource DrawerSecondaryTextBrush}"
+                                           Text="正在准备可选设置…"
+                                           TextWrapping="Wrap" />
+                            </Grid>
                         </ContentControl>
                         <Button x:Name="DryRunPreviewButton"
                                 Grid.Row="0"
@@ -638,8 +926,16 @@
                                 Click="DryRunPreviewButton_Click"
                                 Content="检查同步计划"
                                 UseSystemFocusVisuals="True" />
+                        <ProgressBar x:Name="DrawerProgressBar"
+                                     Grid.Row="1"
+                                     Grid.Column="0"
+                                     Grid.ColumnSpan="2"
+                                     Height="4"
+                                     HorizontalAlignment="Stretch"
+                                     IsIndeterminate="True"
+                                     Visibility="Collapsed" />
                         <Button x:Name="ModifySelectionButton"
-                                Grid.Row="1"
+                                Grid.Row="3"
                                 Grid.Column="0"
                                 Grid.ColumnSpan="2"
                                 MinHeight="40"
@@ -649,7 +945,8 @@
                                 Content="返回修改"
                                 Style="{StaticResource QuietButtonStyle}"
                                 Visibility="Collapsed" />
-                    </Grid>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
@@ -658,7 +955,7 @@
             <VisualStateGroup x:Name="DrawerWidthStates">
                 <VisualState x:Name="DrawerWideState">
                     <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="381" />
+                        <AdaptiveTrigger MinWindowWidth="821" />
                     </VisualState.StateTriggers>
                 </VisualState>
                 <VisualState x:Name="DrawerCompactState">
@@ -666,22 +963,40 @@
                         <AdaptiveTrigger MinWindowWidth="0" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="SourceRouteField.(Grid.Row)" Value="0" />
-                        <Setter Target="SourceRouteField.(Grid.Column)" Value="0" />
-                        <Setter Target="SourceRouteField.(Grid.ColumnSpan)" Value="3" />
-                        <Setter Target="RouteDirectionIcon.(Grid.Row)" Value="1" />
-                        <Setter Target="RouteDirectionIcon.(Grid.Column)" Value="1" />
-                        <Setter Target="TargetRouteField.(Grid.Row)" Value="2" />
-                        <Setter Target="TargetRouteField.(Grid.Column)" Value="0" />
-                        <Setter Target="TargetRouteField.(Grid.ColumnSpan)" Value="3" />
+                        <Setter Target="WorkspaceGuideColumn.(Grid.Row)" Value="0" />
+                        <Setter Target="WorkspaceGuideColumn.(Grid.Column)" Value="0" />
+                        <Setter Target="WorkspaceGuideColumn.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="WorkspaceStageColumn.(Grid.Row)" Value="1" />
+                        <Setter Target="WorkspaceStageColumn.(Grid.Column)" Value="0" />
+                        <Setter Target="WorkspaceStageColumn.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="AutomaticDiscoveryButton.(Grid.Row)" Value="0" />
+                        <Setter Target="AutomaticDiscoveryButton.(Grid.Column)" Value="0" />
+                        <Setter Target="AutomaticDiscoveryButton.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="FolderPickerButton.(Grid.Row)" Value="0" />
+                        <Setter Target="FolderPickerButton.(Grid.Column)" Value="1" />
+                        <Setter Target="FolderPickerButton.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="DemoModeButton.(Grid.Row)" Value="0" />
+                        <Setter Target="DemoModeButton.(Grid.Column)" Value="2" />
+                        <Setter Target="DemoModeButton.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="ExecutionCheckStep.(Grid.Column)" Value="0" />
+                        <Setter Target="ExecutionCheckStep.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="ExecutionBackupStep.(Grid.Column)" Value="2" />
+                        <Setter Target="ExecutionBackupStep.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="ExecutionCommitStep.(Grid.Row)" Value="1" />
+                        <Setter Target="ExecutionCommitStep.(Grid.Column)" Value="0" />
+                        <Setter Target="ExecutionCommitStep.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="ExecutionVerifyStep.(Grid.Row)" Value="1" />
+                        <Setter Target="ExecutionVerifyStep.(Grid.Column)" Value="2" />
+                        <Setter Target="ExecutionVerifyStep.(Grid.ColumnSpan)" Value="2" />
                         <Setter Target="FooterStatusHost.(Grid.Row)" Value="0" />
                         <Setter Target="DryRunPreviewButton.(Grid.Row)" Value="1" />
                         <Setter Target="DryRunPreviewButton.(Grid.Column)" Value="0" />
                         <Setter Target="DryRunPreviewButton.(Grid.ColumnSpan)" Value="2" />
                         <Setter Target="DryRunPreviewButton.HorizontalAlignment" Value="Stretch" />
-                        <Setter Target="DrawerHeaderPanel.Padding" Value="14,14,12,12" />
-                        <Setter Target="DrawerBodyPanel.Padding" Value="12,4,12,12" />
-                        <Setter Target="DrawerFooterGrid.Padding" Value="12" />
+                        <Setter Target="DrawerProgressBar.(Grid.Row)" Value="2" />
+                        <Setter Target="DrawerHeaderPanel.Padding" Value="16,16,16,14" />
+                        <Setter Target="DrawerBodyPanel.Padding" Value="16,4,16,16" />
+                        <Setter Target="DrawerFooterGrid.Padding" Value="16,13,16,15" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -702,7 +1017,7 @@
                         <Setter Target="StatusArea.(Grid.Row)" Value="0" />
                         <Setter Target="StatusArea.(Grid.Column)" Value="0" />
                         <Setter Target="StatusArea.(Grid.ColumnSpan)" Value="5" />
-                        <Setter Target="SyncProgressBar.(Grid.Row)" Value="1" />
+                        <Setter Target="SyncProgressBar.(Grid.Row)" Value="2" />
                         <Setter Target="SyncProgressBar.(Grid.Column)" Value="0" />
                         <Setter Target="SyncProgressBar.(Grid.ColumnSpan)" Value="5" />
                         <Setter Target="SyncProgressBar.HorizontalAlignment" Value="Stretch" />
