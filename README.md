@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rem021/BlockFerry/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square"></a>
+  <a href="https://github.com/Rem021/BlockFerry/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square"></a>
   <a href="https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml"><img alt="Windows CI" src="https://img.shields.io/github/actions/workflow/status/Rem021/BlockFerry/ci.yml?branch=main&style=flat-square&label=Windows%20CI"></a>
   <a href="LICENSE"><img alt="MPL-2.0 license" src="https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square"></a>
 </p>
