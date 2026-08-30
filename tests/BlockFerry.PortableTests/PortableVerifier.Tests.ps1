@@ -158,9 +158,9 @@ try {
         -ExpectedMessage 'Required root file is empty: THIRD-PARTY-NOTICES.txt'
 
     $caseParent = New-TestDirectory -LeafName 'physical-leaf-case'
-    $actualCaseRoot = [System.IO.Path]::GetFullPath((Join-Path -Path $caseParent -ChildPath 'blockferry-0.1.0-beta.4-win-x64-portable'))
+    $actualCaseRoot = [System.IO.Path]::GetFullPath((Join-Path -Path $caseParent -ChildPath 'blockferry-0.1.0-beta.5-win-x64-portable'))
     $null = [System.IO.Directory]::CreateDirectory($actualCaseRoot)
-    $requestedCaseRoot = [System.IO.Path]::GetFullPath((Join-Path -Path $caseParent -ChildPath 'BlockFerry-0.1.0-beta.4-win-x64-portable'))
+    $requestedCaseRoot = [System.IO.Path]::GetFullPath((Join-Path -Path $caseParent -ChildPath 'BlockFerry-0.1.0-beta.5-win-x64-portable'))
     Assert-ThrowsMessage `
         -Name 'incorrect physical portable leaf casing' `
         -Action { Resolve-PortableRoot -Path $requestedCaseRoot } `

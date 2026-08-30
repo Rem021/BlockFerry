@@ -6,10 +6,10 @@ Windows 首发客户端采用：
 
 - C# / .NET 10 LTS；
 - WinUI 3 / Windows App SDK 当前稳定通道；
-- beta.4 使用 `%LOCALAPPDATA%\BlockFerry` 下的受保护文件事务存储；SQLite 仍只是未来历史索引候选，不参与当前提交或恢复；
+- beta.5 使用 `%LOCALAPPDATA%\BlockFerry` 下的受保护文件事务存储；SQLite 仍只是未来历史索引候选，不参与当前提交或恢复；
 - 原始 Minecraft 文件保持原格式，不迁入私有数据库。
 
-beta.4 的生产组合根只创建一套发现、内容和事务服务。`MainPage` 只投影 `MigrationWorkflowState`，不调用 `File`、`Directory`、环境变量、DPAPI、进程查询或目标写入 API。启动时必须先扫描认证事务记录；存在非终态时进入恢复优先页，在恢复完成前发现与新同步均被锁定。
+beta.5 的生产组合根只创建一套发现、内容和事务服务。`MainPage` 只投影 `MigrationWorkflowState`，不调用 `File`、`Directory`、环境变量、DPAPI、进程查询或目标写入 API。启动时必须先扫描认证事务记录；存在非终态时进入恢复优先页，在恢复完成前发现与新同步均被锁定。
 
 WinUI 负责外壳、Mica、无障碍和 Composition 动画；同步核心不引用 UI，可在命令行与自动化测试中独立运行。根层优先使用 Mica，Acrylic 仅用于浮层或临时面板，避免每张嵌套卡片都实时模糊；减少透明度、高对比度或性能不足时必须降级为不透明材质。其他操作系统若进入正式路线，可复用核心并增加 Avalonia 外壳。
 

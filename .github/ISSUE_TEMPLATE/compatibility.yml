@@ -11,7 +11,7 @@ body:
     id: blockferry
     attributes:
       label: BlockFerry 版本
-      placeholder: 0.1.0-beta.4
+      placeholder: 0.1.0-beta.5
     validations:
       required: true
   - type: textarea

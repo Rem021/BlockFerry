@@ -17,9 +17,9 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <VersionPrefix>0.1.0</VersionPrefix>
-    <VersionSuffix>beta.4</VersionSuffix>
+    <VersionSuffix>beta.5</VersionSuffix>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.4</FileVersion>
+    <FileVersion>0.1.0.5</FileVersion>
     <BlockFerryCoreProject Condition="'$(BlockFerryCoreProject)' == ''">..\BlockFerry.Core\BlockFerry.Core.csproj</BlockFerryCoreProject>
     <ThirdPartyNoticesPath Condition="'$(ThirdPartyNoticesPath)' == '' and Exists('..\..\THIRD-PARTY-NOTICES.txt')">..\..\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticesPath>
     <ThirdPartyNoticesPath Condition="'$(ThirdPartyNoticesPath)' == ''">THIRD-PARTY-NOTICES.txt</ThirdPartyNoticesPath>
@@ -38,8 +38,8 @@
 
   <ItemGroup>
     <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\blockferry-ambient.jpg" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\blockferry-ambient-light.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\blockferry-ambient.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\blockferry-ambient-light.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\NotoSansSC-Variable.ttf" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\NotoSansSC-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(ThirdPartyNoticesPath)" Link="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />

@@ -4,7 +4,6 @@ using BlockFerry.App.WinUI.Selection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
 
@@ -101,7 +100,7 @@ public sealed partial class ContentAdapterCard : UserControl
             AdapterItemsPanel.Children.Add(new TextBlock
             {
                 Text = $"另有 {viewModel.Items.Count - MaximumRenderedItems} 项；提交前仍会完整校验。",
-                Foreground = (Brush)Application.Current.Resources["DrawerSecondaryTextBrush"],
+                Style = TryGetTextStyle("DynamicDrawerSecondaryTextStyle"),
                 TextWrapping = TextWrapping.Wrap,
             });
         }
@@ -165,7 +164,7 @@ public sealed partial class ContentAdapterCard : UserControl
         labels.Children.Add(new TextBlock
         {
             Text = item.DisplayName,
-            Foreground = (Brush)Application.Current.Resources["DrawerTextBrush"],
+            Style = TryGetTextStyle("DynamicDrawerPrimaryTextStyle"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         labels.Children.Add(new TextBlock
@@ -174,12 +173,17 @@ public sealed partial class ContentAdapterCard : UserControl
                 ? item.Description
                 : item.DisabledReason,
             FontSize = 12,
-            Foreground = (Brush)Application.Current.Resources["DrawerSecondaryTextBrush"],
+            Style = TryGetTextStyle("DynamicDrawerSecondaryTextStyle"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.Wrap,
         });
         return labels;
     }
+
+    private static Style? TryGetTextStyle(string key) =>
+        Application.Current.Resources.TryGetValue(key, out var resource)
+            ? resource as Style
+            : null;
 
     private void AdapterCheckBox_Click(object sender, RoutedEventArgs e)
     {

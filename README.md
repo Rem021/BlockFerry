@@ -17,7 +17,7 @@
 </p>
 
 > [!IMPORTANT]
-> `0.1.0-beta.4` is a public beta for Windows 10/11, PCL2, and Minecraft Java 1.21.1. Always review the final migration plan and keep the restore point created by BlockFerry.
+> `0.1.0-beta.5` is a public beta for Windows 10/11, PCL2, and Minecraft Java 1.21.1. Always review the final migration plan and keep the restore point created by BlockFerry.
 
 ## Why BlockFerry?
 

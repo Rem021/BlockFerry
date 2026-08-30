@@ -11,7 +11,7 @@
 </p>
 
 > [!IMPORTANT]
-> 当前是 `0.1.0-beta.4` 测试版，面向 Windows 10/11、PCL2 与 Minecraft Java 1.21.1。请先看最终清单并保留应用生成的还原点。
+> 当前是 `0.1.0-beta.5` 测试版，面向 Windows 10/11、PCL2 与 Minecraft Java 1.21.1。请先看最终清单并保留应用生成的还原点。
 
 ## 它解决什么
 

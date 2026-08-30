@@ -595,38 +595,42 @@ var captureFocusStart = categoryControlSource.IndexOf(
     StringComparison.Ordinal);
 Assert(configureAccessibilityStart >= 0 && captureFocusStart > configureAccessibilityStart,
     "OptionCategoryControl must retain its ConfigureAccessibility method before CaptureFocus.");
-var configureAccessibilitySource = categoryControlSource[
-    configureAccessibilityStart..captureFocusStart];
-Assert(configureAccessibilitySource.Contains("RefreshSettingThemeResources();", StringComparison.Ordinal),
-    "ConfigureAccessibility must refresh theme resources for every existing setting registration.");
-Assert(categoryControlSource.Split("RefreshSettingThemeResources();", StringSplitOptions.None).Length - 1 == 2,
-    "Setting theme resources must refresh exactly from ConfigureAccessibility and after setting controls are built.");
-var refreshThemeResourcesStart = categoryControlSource.IndexOf(
-    "private void RefreshSettingThemeResources()",
-    StringComparison.Ordinal);
-var detachViewModelStart = categoryControlSource.IndexOf(
-    "private void DetachViewModel()",
-    refreshThemeResourcesStart,
-    StringComparison.Ordinal);
-Assert(refreshThemeResourcesStart >= 0 && detachViewModelStart > refreshThemeResourcesStart,
-    "OptionCategoryControl must define a dedicated setting theme-resource refresh method.");
-var refreshThemeResourcesSource = categoryControlSource[
-    refreshThemeResourcesStart..detachViewModelStart];
-Assert(refreshThemeResourcesSource.Contains("foreach (var registration in _settingControls)", StringComparison.Ordinal) &&
-       refreshThemeResourcesSource.Contains(
-           "registration.DisplayNameText.Foreground = (Brush)Application.Current.Resources[\"DrawerTextBrush\"];",
-           StringComparison.Ordinal) &&
-       refreshThemeResourcesSource.Contains(
-           "registration.TechnicalKeyText.Foreground = (Brush)Application.Current.Resources[\"DrawerSecondaryTextBrush\"];",
-           StringComparison.Ordinal) &&
-       refreshThemeResourcesSource.Contains(
-           "registration.RowSurface.Background = new SolidColorBrush(Colors.Transparent);",
-           StringComparison.Ordinal),
-    "The dedicated theme refresh must update both setting labels and safely reset every registered row surface.");
+var dynamicDrawerStyles = appMarkup.Descendants()
+    .Where(element => element.Name.LocalName == "Style" &&
+                      (string?)element.Attribute(xamlNamespace + "Key") is
+                          "DynamicDrawerPrimaryTextStyle" or "DynamicDrawerSecondaryTextStyle")
+    .ToDictionary(
+        element => (string)element.Attribute(xamlNamespace + "Key")!,
+        StringComparer.Ordinal);
+Assert(dynamicDrawerStyles.Count == 2 &&
+       dynamicDrawerStyles.Values.All(style =>
+           (string?)style.Attribute("TargetType") == "TextBlock" &&
+           style.Elements().Any(setter =>
+               (string?)setter.Attribute("Property") == "FontFamily" &&
+               (string?)setter.Attribute("Value") == "{StaticResource AppFontFamily}")) &&
+       dynamicDrawerStyles["DynamicDrawerPrimaryTextStyle"].Elements().Any(setter =>
+           (string?)setter.Attribute("Property") == "Foreground" &&
+           (string?)setter.Attribute("Value") == "{ThemeResource DrawerTextBrush}") &&
+       dynamicDrawerStyles["DynamicDrawerSecondaryTextStyle"].Elements().Any(setter =>
+           (string?)setter.Attribute("Property") == "Foreground" &&
+           (string?)setter.Attribute("Value") == "{ThemeResource DrawerSecondaryTextBrush}"),
+    "Dynamic drawer copy must keep live ThemeResource foreground references through the two shared TextBlock styles.");
 Assert(categoryControlSource.Contains(
-        "new SettingControlRegistration(setting, settingCheckBox, displayName, technicalKey, rowSurface, propertyChanged)",
+           "Style = TryGetTextStyle(\"DynamicDrawerPrimaryTextStyle\")",
+           StringComparison.Ordinal) &&
+       categoryControlSource.Contains(
+           "Style = TryGetTextStyle(\"DynamicDrawerSecondaryTextStyle\")",
+           StringComparison.Ordinal) &&
+       categoryControlSource.Contains(
+           "Application.Current.Resources.TryGetValue(key, out var resource)",
+           StringComparison.Ordinal) &&
+       !categoryControlSource.Contains("RefreshSettingThemeResources", StringComparison.Ordinal) &&
+       !categoryControlSource.Contains("SettingRow_Pointer", StringComparison.Ordinal),
+    "Programmatic setting labels must use safe dynamic styles without concrete-brush refreshes or manual pointer-color handlers.");
+Assert(categoryControlSource.Contains(
+        "new SettingControlRegistration(setting, settingCheckBox, propertyChanged)",
         StringComparison.Ordinal),
-    "Each setting registration must retain its display-name, technical-key, and row-surface presentation elements.");
+    "Setting registrations must retain only behavioral state after presentation moves into ThemeResource styles.");
 Assert(categoryControlSource.Contains("QueueHeaderLocalization();", StringComparison.Ordinal) &&
        categoryControlSource.Contains("UiText.ApplyToVisualTree(CategoryCheckBox);", StringComparison.Ordinal) &&
        categoryControlSource.Contains("UiText.ApplyToVisualTree(DisclosureButton);", StringComparison.Ordinal),
@@ -779,7 +783,7 @@ Assert((string?)adapterDetails.Attribute("Visibility") == "Collapsed" &&
     "Adapter details must start independently collapsed.");
 Assert((string?)emiStatus.Attribute("Visibility") == "Collapsed" &&
        (string?)emiStatus.Attribute("IsHitTestVisible") == "False" &&
-       (string?)emiStatus.Attribute("AutomationProperties.Name") == "检测到 EMI 收藏：beta.4 暂不支持",
+       (string?)emiStatus.Attribute("AutomationProperties.Name") == "检测到 EMI 收藏：beta.5 暂不支持",
     "The EMI row must be a hidden-by-default read-only status with fixed safe UIA text.");
 var contentCardSource = File.ReadAllText(Path.Combine(
     repositoryRoot,
@@ -795,6 +799,16 @@ Assert(contentCardSource.Contains("QueueHeaderLocalization();", StringComparison
        contentCardSource.Contains("UiText.ApplyToVisualTree(AdapterCheckBox);", StringComparison.Ordinal) &&
        contentCardSource.Contains("UiText.ApplyToVisualTree(AdapterDisclosureButton);", StringComparison.Ordinal),
     "New and updated mod-setting cards must project the active language after their dynamic labels are bound.");
+Assert(contentCardSource.Contains(
+           "Style = TryGetTextStyle(\"DynamicDrawerPrimaryTextStyle\")",
+           StringComparison.Ordinal) &&
+       contentCardSource.Contains(
+           "Style = TryGetTextStyle(\"DynamicDrawerSecondaryTextStyle\")",
+           StringComparison.Ordinal) &&
+       contentCardSource.Contains(
+           "Application.Current.Resources.TryGetValue(key, out var resource)",
+           StringComparison.Ordinal),
+    "Programmatic content-adapter labels must use the same safe live ThemeResource text styles.");
 
 var conflictMarkup = XDocument.Load(
     Path.Combine(AppContext.BaseDirectory, "UiContracts", "ConflictResolutionControl.xaml"));
@@ -2177,6 +2191,272 @@ Assert(mainWindowSource.Contains(
            StringComparison.Ordinal),
     "The custom title-bar actions must share the native tall caption-button baseline.");
 
+Assert(mainWindowSource.Contains("CompositionTarget.Rendering +=", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("CompositionTarget.Rendering -=", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("ElementCompositionPreview.GetElementVisual(", StringComparison.Ordinal) &&
+       Regex.Count(
+           mainWindowSource,
+           @"\.Offset\s*=\s*new\s+Vector3\s*\(",
+           RegexOptions.CultureInvariant) == 2,
+     "PointerGlowCompositionContract: pointer following must be synchronized to compositor rendering and update exactly two behind-glass composition offsets.");
+var glowRenderingSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void GlowFollowRendering(object? sender, object e)");
+var pointerGlowSpringSource = File.ReadAllText(Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Services",
+    "PointerGlowSpring.cs"));
+var coreFrequencyMatch = Regex.Match(
+    mainWindowSource,
+    @"GlowCoreAngularFrequency\s*=\s*(?<value>[0-9]+(?:\.[0-9]+)?)",
+    RegexOptions.CultureInvariant);
+var coreDampingMatch = Regex.Match(
+    mainWindowSource,
+    @"GlowCoreDampingRatio\s*=\s*(?<value>[0-9]+(?:\.[0-9]+)?)",
+    RegexOptions.CultureInvariant);
+var trailFrequencyMatch = Regex.Match(
+    mainWindowSource,
+    @"GlowTrailAngularFrequency\s*=\s*(?<value>[0-9]+(?:\.[0-9]+)?)",
+    RegexOptions.CultureInvariant);
+var trailDampingMatch = Regex.Match(
+    mainWindowSource,
+    @"GlowTrailDampingRatio\s*=\s*(?<value>[0-9]+(?:\.[0-9]+)?)",
+    RegexOptions.CultureInvariant);
+var coreFrequencyParsed = double.TryParse(
+    coreFrequencyMatch.Groups["value"].Value,
+    System.Globalization.NumberStyles.Float,
+    System.Globalization.CultureInfo.InvariantCulture,
+    out var coreFrequency);
+var coreDampingParsed = double.TryParse(
+    coreDampingMatch.Groups["value"].Value,
+    System.Globalization.NumberStyles.Float,
+    System.Globalization.CultureInfo.InvariantCulture,
+    out var coreDamping);
+var trailFrequencyParsed = double.TryParse(
+    trailFrequencyMatch.Groups["value"].Value,
+    System.Globalization.NumberStyles.Float,
+    System.Globalization.CultureInfo.InvariantCulture,
+    out var trailFrequency);
+var trailDampingParsed = double.TryParse(
+    trailDampingMatch.Groups["value"].Value,
+    System.Globalization.NumberStyles.Float,
+    System.Globalization.CultureInfo.InvariantCulture,
+    out var trailDamping);
+Assert(coreFrequencyMatch.Success &&
+       coreDampingMatch.Success &&
+       trailFrequencyMatch.Success &&
+       trailDampingMatch.Success &&
+       coreFrequencyParsed &&
+       coreDampingParsed &&
+       trailFrequencyParsed &&
+       trailDampingParsed &&
+       coreFrequency is >= 18 and <= 20 &&
+       coreDamping is >= 0.9 and <= 0.94 &&
+       trailFrequency is >= 11.5 and <= 13.5 &&
+       trailDamping is >= 0.82 and <= 0.9 &&
+       mainWindowSource.Contains("_glowVelocityX", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("_glowVelocityY", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("_trailGlowVelocityX", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("_trailGlowVelocityY", StringComparison.Ordinal) &&
+       Regex.Count(
+           glowRenderingSource,
+           @"PointerGlowSpring\.Advance\(",
+           RegexOptions.CultureInvariant) == 4 &&
+       glowRenderingSource.Contains("remainingSpeed < 4", StringComparison.Ordinal) &&
+       pointerGlowSpringSource.Contains("Math.Exp(-dampingRatio * angularFrequency * elapsedSeconds)", StringComparison.Ordinal) &&
+       pointerGlowSpringSource.Contains("Math.Sqrt(1 - (dampingRatio * dampingRatio))", StringComparison.Ordinal) &&
+       !glowRenderingSource.Contains("responsiveness", StringComparison.Ordinal),
+    "PointerGlowMotionContract: pointer light must use two velocity-preserving analytic springs with a connected core and a slower ambient trail.");
+Assert(!mainWindowSource.Contains("DispatcherTimer", StringComparison.Ordinal) &&
+       !mainWindowSource.Contains("_glowFollowTimer", StringComparison.Ordinal) &&
+       !mainWindowSource.Contains("ForegroundPointerGlow", StringComparison.Ordinal) &&
+       !mainWindowSource.Contains("ForegroundGlowTransform", StringComparison.Ordinal) &&
+       !localizedMainWindowMarkup.Descendants().Any(element =>
+           (string?)element.Attribute(xamlNamespace + "Name") is
+               "ForegroundPointerGlow" or "ForegroundGlowTransform"),
+    "PointerGlowCompositionContract: the fixed-rate UI timer and foreground glow layer must not return.");
+var glowCoreElement = RequireNamedElement(localizedMainWindowMarkup, xamlNamespace, "BackgroundPointerGlow");
+var glowTrailElement = RequireNamedElement(localizedMainWindowMarkup, xamlNamespace, "TrailPointerGlow");
+Assert((string?)glowCoreElement.Attribute("Width") == "220" &&
+       (string?)glowCoreElement.Attribute("Height") == "180" &&
+       (string?)glowCoreElement.Attribute("Fill") == "{ThemeResource PointerGlowStrongBrush}" &&
+       (string?)glowTrailElement.Attribute("Width") == "320" &&
+       (string?)glowTrailElement.Attribute("Height") == "264" &&
+       (string?)glowTrailElement.Attribute("Fill") == "{ThemeResource PointerGlowWeakBrush}" &&
+       glowCoreElement.Parent == glowTrailElement.Parent,
+    "PointerGlowCompositionContract: one restrained core and one faint trail must share the same behind-veil canvas.");
+
+var coreAt60Hz = SimulateGlowStep(coreFrequency, coreDamping, 60, durationSeconds: 1);
+var coreAt144Hz = SimulateGlowStep(coreFrequency, coreDamping, 144, durationSeconds: 1);
+var coreAt240Hz = SimulateGlowStep(coreFrequency, coreDamping, 240, durationSeconds: 1);
+var trailAt60Hz = SimulateGlowStep(trailFrequency, trailDamping, 60, durationSeconds: 1);
+var trailAt240Hz = SimulateGlowStep(trailFrequency, trailDamping, 240, durationSeconds: 1);
+Assert(Math.Abs(coreAt60Hz.Position - coreAt144Hz.Position) < 0.000001 &&
+       Math.Abs(coreAt60Hz.Position - coreAt240Hz.Position) < 0.000001 &&
+       Math.Abs(trailAt60Hz.Position - trailAt240Hz.Position) < 0.000001,
+    "PointerGlowSpringContract: analytic motion must feel the same at 60, 144, and 240 Hz.");
+Assert(coreAt240Hz.Maximum <= 100.1 && trailAt240Hz.Maximum <= 100.6,
+    "PointerGlowSpringContract: both light layers must avoid a visible bounce past the pointer.");
+var steadyRamp = SimulateGlowRamp(
+    coreFrequency,
+    coreDamping,
+    trailFrequency,
+    trailDamping,
+    speed: 1000,
+    updatesPerSecond: 240,
+    durationSeconds: 1.5);
+Assert(steadyRamp.CoreTrailSeparation is >= 32 and <= 52 &&
+       steadyRamp.CoreLag is >= 80 and <= 110 &&
+       steadyRamp.TrailLag is >= 120 and <= 155,
+    "PointerGlowSpringContract: a fast sweep must retain a connected core and a clearly slower ambient trail.");
+
+Assert(Regex.IsMatch(
+           mainWindowSource,
+           @"_micaBackdrop\s*\?\?=\s*new\s+MicaBackdrop\s*\(\s*\)",
+           RegexOptions.CultureInvariant) &&
+       !mainWindowSource.Contains(
+           "advancedEffects ? new MicaBackdrop() : null",
+           StringComparison.Ordinal),
+    "ThemeBackdropLifetimeContract: theme refreshes must reuse one lazily-created Mica backdrop instead of allocating one per refresh.");
+Assert(mainWindowSource.Contains("DispatcherQueue.TryEnqueue", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("_themeTransitionGeneration", StringComparison.Ordinal) &&
+       Regex.IsMatch(
+           mainWindowSource,
+           @"(?:generation\s*!=\s*_themeTransitionGeneration|_themeTransitionGeneration\s*!=\s*generation)",
+           RegexOptions.CultureInvariant) &&
+       Regex.IsMatch(
+           mainWindowSource,
+           @"(?:\+\+_themeTransitionGeneration|_themeTransitionGeneration\+\+)",
+           RegexOptions.CultureInvariant),
+     "ThemeTransitionQueueContract: theme work must be deferred through the dispatcher and reject stale callbacks with a monotonically changing generation.");
+
+var themeToggleSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void ThemeButton_Click(object sender, RoutedEventArgs e)");
+var prepareCoverIndex = themeToggleSource.IndexOf(
+    "_themeTransitionPending = PrepareBackgroundTransitionCover();",
+    StringComparison.Ordinal);
+var requestedThemeIndex = themeToggleSource.IndexOf(
+    "WindowRoot.RequestedTheme =",
+    StringComparison.Ordinal);
+var transitionCoverSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private bool PrepareBackgroundTransitionCover()");
+var existingCoverReuseIndex = transitionCoverSource.IndexOf(
+    "_themeTransitionPending &&",
+    StringComparison.Ordinal);
+var freshCoverCaptureIndex = transitionCoverSource.IndexOf(
+    "SceneBackgroundImage.Source is not ImageSource outgoingBackground",
+    StringComparison.Ordinal);
+var backgroundLoadSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void EnsureThemeBackground(bool force)");
+var backgroundOpenedSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void BackgroundImageOpened(BitmapImage image, long generation)");
+var beginThemeTransitionSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void BeginThemeTransition()");
+Assert(prepareCoverIndex >= 0 && requestedThemeIndex > prepareCoverIndex &&
+       existingCoverReuseIndex >= 0 && freshCoverCaptureIndex > existingCoverReuseIndex &&
+       transitionCoverSource.Contains("PreviousSceneBackgroundImage.Source is not null", StringComparison.Ordinal) &&
+       transitionCoverSource.Contains(
+            "PreviousSceneBackgroundImage.Source = outgoingBackground;",
+           StringComparison.Ordinal) &&
+       transitionCoverSource.Contains("PreviousSceneVeil.Fill = SceneVeil.Fill;", StringComparison.Ordinal) &&
+       transitionCoverSource.Contains("ThemeTransitionCover.Opacity = 1;", StringComparison.Ordinal),
+    "ThemeNoBlankFrameContract: the fully rendered outgoing scene and its veil must cover the window before ThemeResource values switch.");
+Assert(themeToggleSource.Contains(
+           "(_pendingBackground is not null && !_themeTransitionPending)",
+           StringComparison.Ordinal),
+    "ThemeNoBlankFrameContract: an undecoded initial bitmap must never be promoted to the outgoing cover.");
+var imageOpenedHookIndex = backgroundLoadSource.IndexOf("image.ImageOpened +=", StringComparison.Ordinal);
+var sourceAssignmentIndex = backgroundLoadSource.IndexOf("SceneBackgroundImage.Source = image;", StringComparison.Ordinal);
+var uriAssignmentIndex = backgroundLoadSource.IndexOf("image.UriSource =", StringComparison.Ordinal);
+Assert(imageOpenedHookIndex >= 0 &&
+       sourceAssignmentIndex > imageOpenedHookIndex &&
+       uriAssignmentIndex > sourceAssignmentIndex &&
+       backgroundOpenedSource.Contains("generation != _backgroundLoadGeneration", StringComparison.Ordinal) &&
+       backgroundOpenedSource.Contains("ReferenceEquals(_pendingBackground, image)", StringComparison.Ordinal) &&
+       backgroundOpenedSource.Contains("BeginThemeTransition();", StringComparison.Ordinal) &&
+       !beginThemeTransitionSource.Contains("ContentLayer.Opacity", StringComparison.Ordinal),
+    "ThemeNoBlankFrameContract: the incoming bitmap must be generation-checked and decoded before only the background cover dissolves.");
+var sceneLayerNames = localizedMainWindowMarkup.Root!
+    .Elements()
+    .Single(element => (string?)element.Attribute(xamlNamespace + "Name") == "WindowRoot")
+    .Elements()
+    .Select(element => (string?)element.Attribute(xamlNamespace + "Name"))
+    .ToList();
+Assert(sceneLayerNames.IndexOf("SceneVeil") >= 0 &&
+       sceneLayerNames.IndexOf("ThemeTransitionCover") > sceneLayerNames.IndexOf("SceneVeil") &&
+       sceneLayerNames.IndexOf("ContentLayer") > sceneLayerNames.IndexOf("ThemeTransitionCover"),
+    "ThemeNoBlankFrameContract: the outgoing scene cover must sit above the active veil and below interactive content.");
+
+var appWindowChangedSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)");
+var queueBackgroundResizeSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void QueueBackgroundResizeRefresh()");
+var completeThemeToggleSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void CompleteThemeToggle()");
+var cancelThemeTransitionSource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private void CancelThemeTransition(bool restoreOutgoingBackground)");
+Assert(mainWindowSource.Contains("BackgroundResizeDebounceMilliseconds = 140", StringComparison.Ordinal) &&
+       appWindowChangedSource.Contains("QueueBackgroundResizeRefresh();", StringComparison.Ordinal) &&
+       !appWindowChangedSource.Contains("EnsureThemeBackground(", StringComparison.Ordinal) &&
+       queueBackgroundResizeSource.Contains("_backgroundResizeTimer.Stop();", StringComparison.Ordinal) &&
+       queueBackgroundResizeSource.Contains("_backgroundResizeTimer.Start();", StringComparison.Ordinal),
+    "SceneResizeDebounceContract: live resizing must wait for a stable 140 ms window before starting another PNG decode.");
+Assert(completeThemeToggleSource.Contains("_backgroundResizePending", StringComparison.Ordinal) &&
+       completeThemeToggleSource.Contains("QueueBackgroundResizeRefresh();", StringComparison.Ordinal),
+    "SceneResizeDebounceContract: a size change observed during theme switching must be replayed after the transition.");
+Assert(cancelThemeTransitionSource.Contains("_backgroundTheme = _outgoingBackgroundTheme;", StringComparison.Ordinal) &&
+       cancelThemeTransitionSource.Contains("_backgroundRenderWidthKey = _outgoingBackgroundRenderWidthKey;", StringComparison.Ordinal),
+    "ThemeRollbackMetadataContract: restoring the outgoing bitmap must restore its cache identity as well.");
+
+var renderSizePolicySource = ExtractCSharpMethodBody(
+    mainWindowSource,
+    "private int CalculateBackgroundRenderWidthKey()");
+Assert(mainWindowSource.Contains("BackgroundReloadQuantum = 128", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("BackgroundSourceWidth = 3172", StringComparison.Ordinal) &&
+       mainWindowSource.Contains("BackgroundAspectRatio = 3172d / 1984d", StringComparison.Ordinal) &&
+       renderSizePolicySource.Contains("AppWindow.ClientSize", StringComparison.Ordinal) &&
+       renderSizePolicySource.Contains("requiredWidth / (double)BackgroundReloadQuantum", StringComparison.Ordinal) &&
+       renderSizePolicySource.Contains("Math.Clamp(roundedWidth, BackgroundReloadQuantum, BackgroundSourceWidth)", StringComparison.Ordinal) &&
+       !backgroundLoadSource.Contains("DecodePixelWidth", StringComparison.Ordinal) &&
+       !backgroundLoadSource.Contains("DecodePixelType", StringComparison.Ordinal),
+    "SceneAutoDecodeContract: WinUI must right-size the live background from the real client area without an oversized manual decode and second bilinear shrink.");
+
+var sceneAssetDirectory = Path.Combine(
+    repositoryRoot,
+    "src",
+    "BlockFerry.App.WinUI",
+    "Assets");
+var darkScenePath = Path.Combine(sceneAssetDirectory, "blockferry-ambient.png");
+var lightScenePath = Path.Combine(sceneAssetDirectory, "blockferry-ambient-light.png");
+var darkSceneFrame = ReadPngFrameInfo(darkScenePath);
+var lightSceneFrame = ReadPngFrameInfo(lightScenePath);
+Assert(darkSceneFrame.Width == 3172 && darkSceneFrame.Height == 1984 &&
+       lightSceneFrame.Width == 3172 && lightSceneFrame.Height == 1984,
+    $"SceneAssetNativeResolutionContract: both ambient PNGs must preserve the selected originals at 3172x1984; dark={darkSceneFrame.Width}x{darkSceneFrame.Height}, light={lightSceneFrame.Width}x{lightSceneFrame.Height}.");
+Assert(darkSceneFrame == lightSceneFrame,
+    "SceneAssetAlignmentContract: dark and light ambient PNGs must have identical dimensions, bit depth, and color type for an aligned theme dissolve.");
+Assert(new FileInfo(darkScenePath).Length > 6_000_000 &&
+       new FileInfo(lightScenePath).Length > 6_000_000,
+    "SceneAssetDetailContract: both selected PNG originals must retain their full encoded detail instead of a recompressed derivative.");
+Assert(darkSceneFrame.BitDepth == 8 && darkSceneFrame.ColorType == 2,
+    $"SceneAssetNativeResolutionContract: ambient PNGs must be 8-bit truecolor RGB images; bitDepth={darkSceneFrame.BitDepth}, colorType={darkSceneFrame.ColorType}.");
+Assert(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(darkScenePath))) ==
+           "C06DADA0E0C42D8C1AF1421CF91AD07E8B96D67D9D9608CFB8586B76C6D818F9" &&
+       Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(lightScenePath))) ==
+           "1E6E1C208EF1DD538948C3E8FD945F4EF415D0CA2FEF55CEF96BFF5DACEFA35E",
+    "SceneAssetOriginalBytesContract: packaged dark and light scenes must remain byte-identical to the two user-selected PNG originals.");
+
 var demoCatalog = DemoOptionsSelectionData.CreateCatalog();
 Assert(demoCatalog.SelectableDifferences.Select(item => item.Key).SequenceEqual(
         ["lang", "key_key.jump", "soundCategory_music", "futureOption"]),
@@ -2690,11 +2970,11 @@ Assert(bundledAddGroup.Bundles[0].Items.Single().Title == "语言 · lang" &&
        bundledAddGroup.Bundles[2].Items.Single().Title == "深色模式",
     "ReviewCardsExposeClearDetails: expanded rows must identify the setting instead of repeating the same action label.");
 
-Assert(SemanticVersion.TryParse("v0.1.0-beta.4", out var beta4) &&
-       SemanticVersion.TryParse("0.1.0-beta.5", out var beta5) &&
+Assert(SemanticVersion.TryParse("v0.1.0-beta.5", out var beta5) &&
+       SemanticVersion.TryParse("0.1.0-beta.6", out var beta6) &&
        SemanticVersion.TryParse("0.1.0", out var stable) &&
-       beta5.CompareTo(beta4) > 0 &&
-       stable.CompareTo(beta5) > 0 &&
+       beta6.CompareTo(beta5) > 0 &&
+       stable.CompareTo(beta6) > 0 &&
        !SemanticVersion.TryParse("0.1", out _) &&
        !SemanticVersion.TryParse("0.1.0-beta.04", out _),
     "UpdateSemVerOrdering: prerelease ordering must follow SemVer and reject ambiguous versions.");
@@ -2703,8 +2983,8 @@ var updatePayload = System.Text.Encoding.UTF8.GetBytes(
     """
     [
       {
-        "tag_name": "v0.1.0-beta.5",
-        "html_url": "https://github.com/Rem021/BlockFerry/releases/tag/v0.1.0-beta.5",
+        "tag_name": "v0.1.0-beta.6",
+        "html_url": "https://github.com/Rem021/BlockFerry/releases/tag/v0.1.0-beta.6",
         "draft": false,
         "prerelease": true
       },
@@ -2726,7 +3006,7 @@ var updateResult = GitHubReleaseUpdateChecker.EvaluateReleasePayload(
     BlockFerryReleaseInfo.CurrentVersion,
     updatePayload);
 Assert(updateResult.Status == UpdateCheckStatus.UpdateAvailable &&
-       updateResult.LatestVersion == "v0.1.0-beta.5" &&
+       updateResult.LatestVersion == "v0.1.0-beta.6" &&
        updateResult.ReleasePage?.Host == "github.com",
     "UpdateCheckTrustBoundary: only a newer non-draft release on the official repository may be shown.");
 
@@ -2734,8 +3014,8 @@ var noUpdatePayload = System.Text.Encoding.UTF8.GetBytes(
     """
     [
       {
-        "tag_name": "v0.1.0-beta.4",
-        "html_url": "https://github.com/Rem021/BlockFerry/releases/tag/v0.1.0-beta.4",
+        "tag_name": "v0.1.0-beta.5",
+        "html_url": "https://github.com/Rem021/BlockFerry/releases/tag/v0.1.0-beta.5",
         "draft": false,
         "prerelease": true
       }
@@ -3016,7 +3296,7 @@ static void ContentAdapterSelectionContracts()
     Assert(selection.Cards[1].Title == "界面外观" &&
            selection.Cards[1].Description == "Dark Mode Everywhere 深色模式" &&
            selection.Cards[2].HasUnsupportedEmiState &&
-           selection.Cards[2].UnsupportedEmiText == "检测到 EMI 收藏：beta.4 暂不支持",
+           selection.Cards[2].UnsupportedEmiText == "检测到 EMI 收藏：beta.5 暂不支持",
         "UnsupportedEmiState must map to one fixed nonselectable JEI detail row.");
     Assert(!selection.HasUnresolvedConflicts,
         "A default KeepTarget conflict must be resolved without silently selecting source data.");
@@ -3288,6 +3568,99 @@ static OptionsSelectionCatalog CreateCatalog() => new(
     [],
     [],
     []);
+
+static (int Width, int Height, int BitDepth, int ColorType) ReadPngFrameInfo(string path)
+{
+    var data = File.ReadAllBytes(path);
+    ReadOnlySpan<byte> pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (data.Length < 33 || !data.AsSpan(0, pngSignature.Length).SequenceEqual(pngSignature))
+    {
+        throw new InvalidOperationException($"SceneAssetNativeResolutionContract: '{path}' is not a PNG image.");
+    }
+
+    var chunkLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(8, 4));
+    if (chunkLength != 13 || !data.AsSpan(12, 4).SequenceEqual("IHDR"u8))
+    {
+        throw new InvalidOperationException(
+            $"SceneAssetNativeResolutionContract: '{path}' does not begin with a valid IHDR chunk.");
+    }
+
+    return (
+        Width: checked((int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(16, 4))),
+        Height: checked((int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(20, 4))),
+        BitDepth: data[24],
+        ColorType: data[25]);
+}
+
+static (double Position, double Velocity, double Maximum) SimulateGlowStep(
+    double angularFrequency,
+    double dampingRatio,
+    int updatesPerSecond,
+    double durationSeconds)
+{
+    const double target = 100;
+    var position = 0d;
+    var velocity = 0d;
+    var maximum = position;
+    var updateCount = checked((int)Math.Round(updatesPerSecond * durationSeconds));
+    var elapsedSeconds = durationSeconds / updateCount;
+
+    for (var update = 0; update < updateCount; update++)
+    {
+        PointerGlowSpring.Advance(
+            ref position,
+            ref velocity,
+            target,
+            elapsedSeconds,
+            angularFrequency,
+            dampingRatio);
+        maximum = Math.Max(maximum, position);
+    }
+
+    return (position, velocity, maximum);
+}
+
+static (double CoreLag, double TrailLag, double CoreTrailSeparation) SimulateGlowRamp(
+    double coreAngularFrequency,
+    double coreDampingRatio,
+    double trailAngularFrequency,
+    double trailDampingRatio,
+    double speed,
+    int updatesPerSecond,
+    double durationSeconds)
+{
+    var corePosition = 0d;
+    var coreVelocity = 0d;
+    var trailPosition = 0d;
+    var trailVelocity = 0d;
+    var target = 0d;
+    var updateCount = checked((int)Math.Round(updatesPerSecond * durationSeconds));
+    var elapsedSeconds = durationSeconds / updateCount;
+
+    for (var update = 0; update < updateCount; update++)
+    {
+        target += speed * elapsedSeconds;
+        PointerGlowSpring.Advance(
+            ref corePosition,
+            ref coreVelocity,
+            target,
+            elapsedSeconds,
+            coreAngularFrequency,
+            coreDampingRatio);
+        PointerGlowSpring.Advance(
+            ref trailPosition,
+            ref trailVelocity,
+            target,
+            elapsedSeconds,
+            trailAngularFrequency,
+            trailDampingRatio);
+    }
+
+    return (
+        CoreLag: target - corePosition,
+        TrailLag: target - trailPosition,
+        CoreTrailSeparation: corePosition - trailPosition);
+}
 
 static void Assert(bool condition, string message)
 {

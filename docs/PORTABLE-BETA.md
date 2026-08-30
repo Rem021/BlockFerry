@@ -1,6 +1,6 @@
 # BlockFerry Portable Beta 使用说明
 
-本文描述版本 `0.1.0-beta.4` 的便携版交付约定。版本文件夹固定为 `BlockFerry-0.1.0-beta.4-win-x64-portable`，zip 固定为 `BlockFerry-0.1.0-beta.4-win-x64-portable.zip`。发布脚本只有在本地校验全部通过后才会生成这两项；已有同名路径绝不覆盖。
+本文描述版本 `0.1.0-beta.5` 的便携版交付约定。版本文件夹固定为 `BlockFerry-0.1.0-beta.5-win-x64-portable`，zip 固定为 `BlockFerry-0.1.0-beta.5-win-x64-portable.zip`。发布脚本只有在本地校验全部通过后才会生成这两项；已有同名路径绝不覆盖。
 
 ## 系统要求
 
@@ -15,7 +15,7 @@
 
 不要直接从压缩包内部运行（never run from inside the zip）。
 
-## beta.4 能同步什么
+## beta.5 能同步什么
 
 BlockFerry 先进行有上限的 discovery，也可由你通过文件夹选择器明确指定 PCL、`.minecraft`、`versions` 或具体实例目录。发现、内容读取和 dry-run 最终清单阶段对 Minecraft/PCL 保持 zero writes；只有你在卡片清单中确认并点击“备份并同步”后，才进入 apply / migration。
 
@@ -42,7 +42,7 @@ JEI 会根据当前服务器显示名、地址与 LAN 标记生成收藏 scope�
 - 每个目标文件在修改前创建经身份验证的 backup；使用暂存、原子替换、SHA-256 复读和事务日志。
 - 失败会 rollback。若进程在中间退出，下次启动必须先恢复，不能开始新同步。
 - 成功后仅在目标 after-state 未被后续修改时提供“撤销这次同步”；撤销本身也可中断恢复。
-- UNC、映射网络盘和网络重定向在 beta.4 仍是只读，不执行迁移写入。
+- UNC、映射网络盘和网络重定向在 beta.5 仍是只读，不执行迁移写入。
 
 开发与验收只使用 demo mode 或 copied fixtures。正式版第一次对真实实例执行操作，应由用户自己选择来源/目标、检查卡片并明确确认；不要拿唯一实例做开发故障注入。
 
@@ -58,7 +58,7 @@ BlockFerry 的应用状态位于 `%LOCALAPPDATA%\BlockFerry`。其中可包含 `
 
 ## 移除
 
-关闭程序后删除 `BlockFerry-0.1.0-beta.4-win-x64-portable` 文件夹即可移除程序。若同时删除 `%LOCALAPPDATA%\BlockFerry`，主题、最近位置、未完成恢复记录和撤销依据都会一并消失；有“上次同步未完成”提示时不要先删除该目录。
+关闭程序后删除 `BlockFerry-0.1.0-beta.5-win-x64-portable` 文件夹即可移除程序。若同时删除 `%LOCALAPPDATA%\BlockFerry`，主题、最近位置、未完成恢复记录和撤销依据都会一并消失；有“上次同步未完成”提示时不要先删除该目录。
 
 ## 故障排查
 

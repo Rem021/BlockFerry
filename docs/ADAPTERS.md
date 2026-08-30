@@ -4,7 +4,7 @@
 
 启动器适配器只负责定位和描述，不负责理解 Minecraft 内容。
 
-**当前状态**：beta.4 已实现 PCL2 有限自动发现与手动文件夹入口，并将经过证明的隔离 gameRoot 交给四个内容适配器。实例解析仍然只读；真正写入由独立事务层执行，启动器适配器本身从不修改 PCL 元数据。
+**当前状态**：beta.5 已实现 PCL2 有限自动发现与手动文件夹入口，并将经过证明的隔离 gameRoot 交给四个内容适配器。实例解析仍然只读；真正写入由独立事务层执行，启动器适配器本身从不修改 PCL 元数据。
 
 ```csharp
 public interface ILauncherAdapter
@@ -32,7 +32,7 @@ public interface ILauncherAdapter
 4. Modrinth、CurseForge：只读识别或手动选择 gameDir，不写 SQLite、`minecraftinstance.json` 等私有元数据；
 5. 手动目录始终可用，作为所有平台的安全兜底。
 
-当前 PCL2 实现对未知旧隔离值保持阻断，不调用会写回 `VersionArgumentIndieV2` 的 PCL 初始化逻辑；junction、符号链接、网络重定向和不可信实例记录也会在读取或授权前拒绝。beta.4 不迁移任何 PCL 启动器专属设置。
+当前 PCL2 实现对未知旧隔离值保持阻断，不调用会写回 `VersionArgumentIndieV2` 的 PCL 初始化逻辑；junction、符号链接、网络重定向和不可信实例记录也会在读取或授权前拒绝。beta.5 不迁移任何 PCL 启动器专属设置。
 
 ATLauncher、GDLauncher 等其他 Java 启动器可在用户明确选择独立实际 gameDir 后使用目录模式；这只代表已支持内容的目录兼容，不代表能自动发现实例或迁移启动器专属设置。Mojang 默认共享 `.minecraft`、封闭客户端、Bedrock 和移动版不在 0.1 原生适配承诺内。
 
@@ -40,7 +40,7 @@ ATLauncher、GDLauncher 等其他 Java 启动器可在用户明确选择独立�
 
 默认实例建议必须由整合包身份与构建版本决定，不使用目录修改时间或名称里的脆弱字符串。
 
-beta.4 不创建 `saves/` 或其他未由内容适配器声明的目录。任何未来的 PCL 首启兼容动作都必须先进入计划、清单、事务 allowlist 和回滚测试，不能由启动器适配器暗中执行。
+beta.5 不创建 `saves/` 或其他未由内容适配器声明的目录。任何未来的 PCL 首启兼容动作都必须先进入计划、清单、事务 allowlist 和回滚测试，不能由启动器适配器暗中执行。
 
 ## 内容适配器
 
@@ -74,7 +74,7 @@ beta.4 不创建 `saves/` 或其他未由内容适配器声明的目录。任何
 - 迁移整个已审核收藏 scope，保留 JEI codec 中的物品/配方收藏对象，不猜测或逐项改写未知字段；
 - 单人世界 scope 只接受精确目录名；服务器 scope 仅在目标运行时目录可唯一确认时映射，目标尚未进入服务器或存在歧义时安全阻止；
 - 缺失、重复属性、不受支持的主版本、错误 schema 或超过读取限额时为 Unsupported，产生零 mutation；
-- 检测到 EMI 时仅显示 `beta.4 暂不支持`，不读取或生成 `emi.json`。
+- 检测到 EMI 时仅显示 `beta.5 暂不支持`，不读取或生成 `emi.json`。
 
 ### Extreme Sound Muffler
 

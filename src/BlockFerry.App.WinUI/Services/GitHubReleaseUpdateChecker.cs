@@ -5,7 +5,7 @@ namespace BlockFerry.App.WinUI.Services;
 
 internal static class BlockFerryReleaseInfo
 {
-    internal const string CurrentVersion = "0.1.0-beta.4";
+    internal const string CurrentVersion = "0.1.0-beta.5";
     internal const string RepositoryUrl = "https://github.com/Rem021/BlockFerry";
     internal const string ReleasesApiUrl =
         "https://api.github.com/repos/Rem021/BlockFerry/releases?per_page=20";

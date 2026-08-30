@@ -2,11 +2,9 @@ using System.ComponentModel;
 using BlockFerry.App.WinUI.Localization;
 using BlockFerry.App.WinUI.Selection;
 using BlockFerry.Core.Options;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
@@ -57,8 +55,6 @@ public sealed partial class OptionCategoryControl : UserControl
 
     internal void ConfigureAccessibility(bool animationsEnabled, bool highContrast)
     {
-        RefreshSettingThemeResources();
-
         var mode = highContrast
             ? OptionExpansionMotionMode.HighContrast
             : animationsEnabled
@@ -163,13 +159,13 @@ public sealed partial class OptionCategoryControl : UserControl
             var displayName = new TextBlock
             {
                 Text = setting.DisplayName,
-                Foreground = (Brush)Application.Current.Resources["DrawerTextBrush"],
+                Style = TryGetTextStyle("DynamicDrawerPrimaryTextStyle"),
                 TextTrimming = TextTrimming.CharacterEllipsis,
             };
             var technicalKey = new TextBlock
             {
                 Text = setting.EscapedTechnicalKey,
-                Foreground = (Brush)Application.Current.Resources["DrawerSecondaryTextBrush"],
+                Style = TryGetTextStyle("DynamicDrawerSecondaryTextStyle"),
                 FontFamily = new FontFamily("Consolas"),
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -188,15 +184,9 @@ public sealed partial class OptionCategoryControl : UserControl
             var rowSurface = new Border
             {
                 Padding = new Thickness(8, 6, 8, 6),
-                Background = new SolidColorBrush(Colors.Transparent),
                 CornerRadius = new CornerRadius(8),
                 Child = labels,
             };
-            rowSurface.PointerEntered += SettingRow_PointerEntered;
-            rowSurface.PointerExited += SettingRow_PointerExited;
-            rowSurface.PointerPressed += SettingRow_PointerPressed;
-            rowSurface.PointerReleased += SettingRow_PointerReleased;
-            rowSurface.PointerCaptureLost += SettingRow_PointerCaptureLost;
             settingCheckBox.Content = rowSurface;
 
             settingCheckBox.Click += (_, _) => setting.IsSelected = settingCheckBox.IsChecked == true;
@@ -208,11 +198,10 @@ public sealed partial class OptionCategoryControl : UserControl
                 }
             };
             setting.PropertyChanged += propertyChanged;
-            _settingControls.Add(new SettingControlRegistration(setting, settingCheckBox, displayName, technicalKey, rowSurface, propertyChanged));
+            _settingControls.Add(new SettingControlRegistration(setting, settingCheckBox, propertyChanged));
             ChildrenPanel.Children.Add(settingCheckBox);
         }
 
-        RefreshSettingThemeResources();
         UiText.ApplyToVisualTree(ChildrenRegion);
         var revision = UiText.Revision;
         _ = DispatcherQueue?.TryEnqueue(() =>
@@ -229,16 +218,6 @@ public sealed partial class OptionCategoryControl : UserControl
         if (!_settingsBuilt && _viewModel is not null)
         {
             BuildSettingControls(_viewModel);
-        }
-    }
-
-    private void RefreshSettingThemeResources()
-    {
-        foreach (var registration in _settingControls)
-        {
-            registration.DisplayNameText.Foreground = (Brush)Application.Current.Resources["DrawerTextBrush"];
-            registration.TechnicalKeyText.Foreground = (Brush)Application.Current.Resources["DrawerSecondaryTextBrush"];
-            registration.RowSurface.Background = new SolidColorBrush(Colors.Transparent);
         }
     }
 
@@ -442,51 +421,13 @@ public sealed partial class OptionCategoryControl : UserControl
     private bool IsFocusWithinSettings() =>
         _settingControls.Any(registration => registration.CheckBox.FocusState != FocusState.Unfocused);
 
-    private static void SettingRow_PointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Border row)
-        {
-            row.Background = (Brush)Application.Current.Resources["OptionSettingHoverBrush"];
-        }
-    }
-
-    private static void SettingRow_PointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Border row)
-        {
-            row.Background = new SolidColorBrush(Colors.Transparent);
-        }
-    }
-
-    private static void SettingRow_PointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Border row)
-        {
-            row.Background = (Brush)Application.Current.Resources["OptionSettingPressedBrush"];
-        }
-    }
-
-    private static void SettingRow_PointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Border row)
-        {
-            row.Background = (Brush)Application.Current.Resources["OptionSettingHoverBrush"];
-        }
-    }
-
-    private static void SettingRow_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Border row)
-        {
-            row.Background = new SolidColorBrush(Colors.Transparent);
-        }
-    }
+    private static Style? TryGetTextStyle(string key) =>
+        Application.Current.Resources.TryGetValue(key, out var resource)
+            ? resource as Style
+            : null;
 
     private sealed record SettingControlRegistration(
         OptionSettingViewModel ViewModel,
         CheckBox CheckBox,
-        TextBlock DisplayNameText,
-        TextBlock TechnicalKeyText,
-        Border RowSurface,
         PropertyChangedEventHandler PropertyChanged);
 }

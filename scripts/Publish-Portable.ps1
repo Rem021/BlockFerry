@@ -22,9 +22,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ProductVersion = '0.1.0-beta.4'
-$PortableFolderName = 'BlockFerry-0.1.0-beta.4-win-x64-portable'
-$PortableZipName = 'BlockFerry-0.1.0-beta.4-win-x64-portable.zip'
+$ProductVersion = '0.1.0-beta.5'
+$PortableFolderName = 'BlockFerry-0.1.0-beta.5-win-x64-portable'
+$PortableZipName = 'BlockFerry-0.1.0-beta.5-win-x64-portable.zip'
 $RuntimeIdentifier = 'win-x64'
 $PublishProfile = 'Portable-x64'
 $Configuration = 'Release'
@@ -893,8 +893,8 @@ function Invoke-PublishPortable {
     $noticesSource = Resolve-RequiredChildFile -Root $resolvedRepository -RelativePath 'THIRD-PARTY-NOTICES.txt' -Label 'Third-party notices'
     $null = Resolve-RequiredChildFile -Root $resolvedRepository -RelativePath 'src\BlockFerry.App.WinUI\Assets\AppIcon.ico' -Label 'Repository AppIcon.ico'
 
-    $stagingCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'BlockFerry-0.1.0-beta.4-win-x64-portable-staging'))
-    $roundTripCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'BlockFerry-0.1.0-beta.4-win-x64-portable-roundtrip'))
+    $stagingCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'BlockFerry-0.1.0-beta.5-win-x64-portable-staging'))
+    $roundTripCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'BlockFerry-0.1.0-beta.5-win-x64-portable-roundtrip'))
     $dotnetHomeCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'd'))
     $nugetPackagesCandidate = [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedWork -ChildPath 'n'))
     if ($nugetPackagesCandidate.Length -gt 120) {

@@ -8,9 +8,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ProductVersion = '0.1.0-beta.4'
-$PortableFolderName = 'BlockFerry-0.1.0-beta.4-win-x64-portable'
-$PortableZipName = 'BlockFerry-0.1.0-beta.4-win-x64-portable.zip'
+$ProductVersion = '0.1.0-beta.5'
+$PortableFolderName = 'BlockFerry-0.1.0-beta.5-win-x64-portable'
+$PortableZipName = 'BlockFerry-0.1.0-beta.5-win-x64-portable.zip'
 $RuntimeIdentifier = 'win-x64'
 $ManifestFileName = 'SHA256SUMS.txt'
 $ReadmeFileName = 'README-' + [char]0x5148 + [char]0x8BFB + '.txt'

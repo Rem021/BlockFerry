@@ -111,7 +111,7 @@
                         <Border
                             x:Name="EmiUnsupportedStatus"
                             Padding="10"
-                            AutomationProperties.Name="检测到 EMI 收藏：beta.4 暂不支持"
+                            AutomationProperties.Name="检测到 EMI 收藏：beta.5 暂不支持"
                             Background="{ThemeResource OptionLockedSafetyStripBrush}"
                             CornerRadius="10"
                             IsHitTestVisible="False"
@@ -130,7 +130,7 @@
                                     x:Name="EmiUnsupportedText"
                                     Grid.Column="1"
                                     Foreground="{ThemeResource DrawerTextBrush}"
-                                    Text="检测到 EMI 收藏：beta.4 暂不支持"
+                                    Text="检测到 EMI 收藏：beta.5 暂不支持"
                                     TextWrapping="Wrap" />
                             </Grid>
                         </Border>

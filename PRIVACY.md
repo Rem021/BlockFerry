@@ -1,6 +1,6 @@
 # BlockFerry 隐私说明
 
-生效版本：`0.1.0-beta.4`
+生效版本：`0.1.0-beta.5`
 
 BlockFerry 不提供账号系统，不包含广告或遥测 SDK，也不把 Minecraft 配置、实例路径、JEI 收藏、设备标识或使用统计上传给项目维护者。
 

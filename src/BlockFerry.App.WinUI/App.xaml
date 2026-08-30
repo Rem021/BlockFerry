@@ -50,9 +50,9 @@
                                   TintLuminosityOpacity="0.58"
                                   TintOpacity="0.72" />
                     <LinearGradientBrush x:Key="SceneVeilBrush" StartPoint="0,0.5" EndPoint="1,0.5">
-                        <GradientStop Offset="0" Color="#5A050607" />
-                        <GradientStop Offset="0.45" Color="#12050607" />
-                        <GradientStop Offset="1" Color="#24000000" />
+                        <GradientStop Offset="0" Color="#42050607" />
+                        <GradientStop Offset="0.45" Color="#0C050607" />
+                        <GradientStop Offset="1" Color="#1C000000" />
                     </LinearGradientBrush>
                     <LinearGradientBrush x:Key="TopFadeBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                         <GradientStop Offset="0" Color="#720B0C0E" />
@@ -69,10 +69,10 @@
                                          GradientOrigin="0.5,0.5"
                                          RadiusX="0.5"
                                          RadiusY="0.5">
-                        <GradientStop Offset="0" Color="#30DED6CC" />
-                        <GradientStop Offset="0.3" Color="#2ADAD2C8" />
-                        <GradientStop Offset="0.6" Color="#17C8C0B7" />
-                        <GradientStop Offset="0.84" Color="#06B6AFA8" />
+                        <GradientStop Offset="0" Color="#34F5EEE5" />
+                        <GradientStop Offset="0.2" Color="#2BEFE7DD" />
+                        <GradientStop Offset="0.45" Color="#17D8D0C7" />
+                        <GradientStop Offset="0.72" Color="#07C5BEB6" />
                         <GradientStop Offset="1" Color="#00B6AFA8" />
                     </RadialGradientBrush>
                     <RadialGradientBrush x:Key="PointerGlowWeakBrush"
@@ -80,9 +80,9 @@
                                          GradientOrigin="0.5,0.5"
                                          RadiusX="0.5"
                                          RadiusY="0.5">
-                        <GradientStop Offset="0" Color="#22F5EEE5" />
-                        <GradientStop Offset="0.36" Color="#1DEFE7DD" />
-                        <GradientStop Offset="0.7" Color="#08D8D0C7" />
+                        <GradientStop Offset="0" Color="#20DED6CC" />
+                        <GradientStop Offset="0.3" Color="#15DAD2C8" />
+                        <GradientStop Offset="0.65" Color="#07C8C0B7" />
                         <GradientStop Offset="1" Color="#00D8D0C7" />
                     </RadialGradientBrush>
                 </ResourceDictionary>
@@ -125,9 +125,9 @@
                                   TintLuminosityOpacity="0.72"
                                   TintOpacity="0.78" />
                     <LinearGradientBrush x:Key="SceneVeilBrush" StartPoint="0,0.5" EndPoint="1,0.5">
-                        <GradientStop Offset="0" Color="#54FFFFFF" />
-                        <GradientStop Offset="0.45" Color="#0CFFFFFF" />
-                        <GradientStop Offset="1" Color="#12FFFFFF" />
+                        <GradientStop Offset="0" Color="#36FFFFFF" />
+                        <GradientStop Offset="0.45" Color="#08FFFFFF" />
+                        <GradientStop Offset="1" Color="#0CFFFFFF" />
                     </LinearGradientBrush>
                     <LinearGradientBrush x:Key="TopFadeBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                         <GradientStop Offset="0" Color="#88F9F6F1" />
@@ -144,10 +144,10 @@
                                          GradientOrigin="0.5,0.5"
                                          RadiusX="0.5"
                                          RadiusY="0.5">
-                        <GradientStop Offset="0" Color="#60FFFDF8" />
-                        <GradientStop Offset="0.3" Color="#54FFF9F0" />
-                        <GradientStop Offset="0.6" Color="#2CEEE8DE" />
-                        <GradientStop Offset="0.84" Color="#0AD9D4CC" />
+                        <GradientStop Offset="0" Color="#42FFFFFF" />
+                        <GradientStop Offset="0.2" Color="#36FFF9F0" />
+                        <GradientStop Offset="0.45" Color="#1EEEE8DE" />
+                        <GradientStop Offset="0.72" Color="#09D9D4CC" />
                         <GradientStop Offset="1" Color="#00D9D4CC" />
                     </RadialGradientBrush>
                     <RadialGradientBrush x:Key="PointerGlowWeakBrush"
@@ -155,9 +155,9 @@
                                          GradientOrigin="0.5,0.5"
                                          RadiusX="0.5"
                                          RadiusY="0.5">
-                        <GradientStop Offset="0" Color="#38FFFFFF" />
-                        <GradientStop Offset="0.38" Color="#30FFF9F0" />
-                        <GradientStop Offset="0.72" Color="#0CE9E3DA" />
+                        <GradientStop Offset="0" Color="#28FFFFFF" />
+                        <GradientStop Offset="0.3" Color="#1AFFF9F0" />
+                        <GradientStop Offset="0.65" Color="#09E9E3DA" />
                         <GradientStop Offset="1" Color="#00E9E3DA" />
                     </RadialGradientBrush>
                 </ResourceDictionary>
@@ -205,6 +205,18 @@
 
             <Style TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+            </Style>
+
+            <!-- Programmatically created drawer copy keeps a live ThemeResource reference
+                 by applying these styles instead of resolving a concrete brush in code. -->
+            <Style x:Key="DynamicDrawerPrimaryTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+                <Setter Property="Foreground" Value="{ThemeResource DrawerTextBrush}" />
+            </Style>
+
+            <Style x:Key="DynamicDrawerSecondaryTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+                <Setter Property="Foreground" Value="{ThemeResource DrawerSecondaryTextBrush}" />
             </Style>
 
             <Style x:Key="ChromeIconButtonStyle" TargetType="Button">

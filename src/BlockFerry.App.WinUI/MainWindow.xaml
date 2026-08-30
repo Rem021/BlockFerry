@@ -22,31 +22,40 @@
                IsHitTestVisible="False"
                Stretch="UniformToFill" />
 
-        <!-- During a theme change the outgoing scene fades over the newly selected image. -->
-        <Image x:Name="PreviousSceneBackgroundImage"
-               HorizontalAlignment="Stretch"
-               VerticalAlignment="Stretch"
-               AutomationProperties.AccessibilityView="Raw"
-               IsHitTestVisible="False"
-               Opacity="0"
-               Stretch="UniformToFill" />
-
-        <!-- Stronger glow lives beneath the scene veil, as if it were behind frosted glass. -->
+        <!-- Both layers stay beneath the veil: a restrained core keeps the light
+             connected to the pointer while a faint slower layer supplies inertia. -->
         <Canvas IsHitTestVisible="False">
+            <Ellipse x:Name="TrailPointerGlow"
+                     Width="320"
+                     Height="264"
+                     Fill="{ThemeResource PointerGlowWeakBrush}"
+                     Opacity="0" />
             <Ellipse x:Name="BackgroundPointerGlow"
-                     Width="520"
-                     Height="420"
+                     Width="220"
+                     Height="180"
                      Fill="{ThemeResource PointerGlowStrongBrush}"
-                     Opacity="0">
-                <Ellipse.RenderTransform>
-                    <TranslateTransform x:Name="BackgroundGlowTransform" X="-260" Y="-210" />
-                </Ellipse.RenderTransform>
-            </Ellipse>
+                     Opacity="0" />
         </Canvas>
 
-        <Rectangle Fill="{ThemeResource SceneVeilBrush}"
+        <Rectangle x:Name="SceneVeil"
+                   Fill="{ThemeResource SceneVeilBrush}"
                    AutomationProperties.AccessibilityView="Raw"
                    IsHitTestVisible="False" />
+
+        <!-- The fully rendered outgoing scene stays above the new theme until the
+             incoming bitmap has decoded, preventing a light/dark blank frame. -->
+        <Grid x:Name="ThemeTransitionCover"
+              AutomationProperties.AccessibilityView="Raw"
+              IsHitTestVisible="False"
+              Opacity="0">
+            <Image x:Name="PreviousSceneBackgroundImage"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"
+                   IsHitTestVisible="False"
+                   Stretch="UniformToFill" />
+            <Rectangle x:Name="PreviousSceneVeil"
+                       IsHitTestVisible="False" />
+        </Grid>
 
         <Grid x:Name="ContentLayer">
             <Grid.RowDefinitions>
@@ -172,17 +181,5 @@
                    Background="Transparent" />
         </Grid>
 
-        <!-- A very faint surface response keeps controls readable while adding depth. -->
-        <Canvas IsHitTestVisible="False">
-            <Ellipse x:Name="ForegroundPointerGlow"
-                     Width="220"
-                     Height="180"
-                     Fill="{ThemeResource PointerGlowWeakBrush}"
-                     Opacity="0">
-                <Ellipse.RenderTransform>
-                    <TranslateTransform x:Name="ForegroundGlowTransform" X="-110" Y="-90" />
-                </Ellipse.RenderTransform>
-            </Ellipse>
-        </Canvas>
     </Grid>
 </Window>

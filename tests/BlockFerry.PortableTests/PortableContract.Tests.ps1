@@ -209,9 +209,9 @@ foreach ($entry in @(
 
 $publisherSource = $publisher.Source
 foreach ($fixed in @(
-    "`$ProductVersion = '0.1.0-beta.4'",
-    "`$PortableFolderName = 'BlockFerry-0.1.0-beta.4-win-x64-portable'",
-    "`$PortableZipName = 'BlockFerry-0.1.0-beta.4-win-x64-portable.zip'",
+    "`$ProductVersion = '0.1.0-beta.5'",
+    "`$PortableFolderName = 'BlockFerry-0.1.0-beta.5-win-x64-portable'",
+    "`$PortableZipName = 'BlockFerry-0.1.0-beta.5-win-x64-portable.zip'",
     "`$PublishProfile = 'Portable-x64'",
     "`$Configuration = 'Release'",
     "`$Platform = 'x64'"

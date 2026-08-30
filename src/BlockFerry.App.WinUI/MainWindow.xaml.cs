@@ -2,10 +2,14 @@
 using BlockFerry.App.WinUI.Services;
 using BlockFerry.App.WinUI.Localization;
 using System.Diagnostics;
+using System.Numerics;
 using Microsoft.UI;
+using Microsoft.UI.Composition;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -19,8 +23,16 @@ public sealed partial class MainWindow : Window, IDisposable
 {
     private const string LightThemeName = "light";
     private const string DarkThemeName = "dark";
-    private const double BackgroundGlowVisibleOpacity = 0.41;
-    private const double ForegroundGlowVisibleOpacity = 0.032;
+    private const double GlowCoreVisibleOpacity = 0.30;
+    private const double GlowTrailVisibleOpacity = 0.12;
+    private const int BackgroundSourceWidth = 3172;
+    private const int BackgroundReloadQuantum = 128;
+    private const double BackgroundAspectRatio = 3172d / 1984d;
+    private const int BackgroundResizeDebounceMilliseconds = 140;
+    private const double GlowCoreAngularFrequency = 19.0;
+    private const double GlowCoreDampingRatio = 0.92;
+    private const double GlowTrailAngularFrequency = 12.5;
+    private const double GlowTrailDampingRatio = 0.86;
 
     private readonly UISettings _uiSettings = new();
     private readonly AccessibilitySettings _accessibilitySettings = new();
@@ -30,25 +42,43 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly PointerGlowModalCoordinator _pointerGlowModalCoordinator = new();
     private readonly GitHubReleaseUpdateChecker _updateChecker = new();
     private readonly CancellationTokenSource _updateCheckCancellation = new();
-    private readonly DispatcherTimer _glowFollowTimer = new()
-    {
-        Interval = TimeSpan.FromMilliseconds(16),
-    };
+    private MicaBackdrop? _micaBackdrop;
+    private Visual? _backgroundGlowVisual;
+    private Visual? _trailGlowVisual;
     private Storyboard? _themeTransitionStoryboard;
     private Storyboard? _pointerGlowStoryboard;
+    private DispatcherQueueTimer? _backgroundResizeTimer;
     private MainPage? _drawerModalPhaseSource;
     private ImageSource? _outgoingThemeBackground;
+    private ElementTheme _outgoingBackgroundTheme = ElementTheme.Default;
+    private int _outgoingBackgroundRenderWidthKey;
     private bool _themeTransitionPending;
+    private bool _themeRefreshQueued;
+    private bool _themeToggleInProgress;
+    private bool _backgroundResizePending;
+    private bool _systemBackdropAttached;
+    private bool _systemBackdropUnavailable;
     private bool _animationsEnabled = true;
     private bool _isHighContrast;
     private bool _glowPositionInitialized;
-    private bool _glowFollowTimerRunning;
+    private bool _glowRenderingSubscribed;
     private double _glowCurrentX;
     private double _glowCurrentY;
+    private double _glowVelocityX;
+    private double _glowVelocityY;
+    private double _trailGlowCurrentX;
+    private double _trailGlowCurrentY;
+    private double _trailGlowVelocityX;
+    private double _trailGlowVelocityY;
     private double _glowTargetX;
     private double _glowTargetY;
     private long _lastGlowFrameTimestamp;
+    private long _themeTransitionGeneration;
     private long _pointerGlowStoryboardGeneration;
+    private long _backgroundLoadGeneration;
+    private ElementTheme _backgroundTheme = ElementTheme.Default;
+    private int _backgroundRenderWidthKey;
+    private BitmapImage? _pendingBackground;
     private UpdateCheckResult? _availableUpdate;
     private bool _disposed;
 
@@ -72,7 +102,6 @@ public sealed partial class MainWindow : Window, IDisposable
         AppWindow.Changed += AppWindow_Changed;
         AppWindow.Closing += AppWindow_Closing;
         Activated += MainWindow_Activated;
-        _glowFollowTimer.Tick += GlowFollowTimer_Tick;
         Closed += MainWindow_Closed;
 
         ConfigureWindowSizing();
@@ -124,12 +153,23 @@ public sealed partial class MainWindow : Window, IDisposable
         _updateCheckCancellation.Cancel();
         _updateCheckCancellation.Dispose();
         _updateChecker.Dispose();
+        if (_backgroundResizeTimer is not null)
+        {
+            _backgroundResizeTimer.Stop();
+            _backgroundResizeTimer.Tick -= BackgroundResizeTimer_Tick;
+            _backgroundResizeTimer = null;
+        }
+
         StopGlowFollow();
         InvalidatePointerGlowStoryboard();
-        _glowFollowTimer.Tick -= GlowFollowTimer_Tick;
+        InvalidateThemeTransitionStoryboard();
+        WindowRoot.ActualThemeChanged -= WindowRoot_ActualThemeChanged;
+        WindowRoot.Loaded -= WindowRoot_Loaded;
+        InvalidateBackgroundLoad();
         AppWindow.Changed -= AppWindow_Changed;
         AppWindow.Closing -= AppWindow_Closing;
         Activated -= MainWindow_Activated;
+        Closed -= MainWindow_Closed;
 
         if (_drawerModalPhaseSource is not null)
         {
@@ -234,18 +274,109 @@ public sealed partial class MainWindow : Window, IDisposable
 
     private void WindowRoot_ActualThemeChanged(FrameworkElement sender, object args)
     {
-        UpdateThemePresentation();
-        ApplyAccessibilityPreferences();
-
-        if (_themeTransitionPending)
+        if (_themeRefreshQueued || _disposed)
         {
-            BeginThemeTransition();
+            return;
+        }
+
+        // Theme resources are still being swapped while ActualThemeChanged is raised.
+        // Defer authored-image and caption updates to avoid re-entering the XAML tree.
+        _themeRefreshQueued = true;
+        if (!DispatcherQueue.TryEnqueue(ApplyQueuedThemeRefresh))
+        {
+            _themeRefreshQueued = false;
+            ApplyQueuedThemeRefresh();
+        }
+    }
+
+    private void ApplyQueuedThemeRefresh()
+    {
+        _themeRefreshQueued = false;
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            UpdateThemePresentation();
+            if (_themeToggleInProgress && !_themeTransitionPending)
+            {
+                CompleteThemeToggle();
+            }
+        }
+        catch (Exception)
+        {
+            // Theme presentation is optional chrome. Native ThemeResource values have
+            // already switched, so a failed image/caption refresh must never close the app.
+            CancelThemeTransition(restoreOutgoingBackground: true);
         }
     }
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
         UpdateCaptionInsets();
+        if (args.DidSizeChange)
+        {
+            try
+            {
+                QueueBackgroundResizeRefresh();
+            }
+            catch (Exception)
+            {
+                // Resizing remains usable if an optional authored image cannot decode.
+                _backgroundTheme = ElementTheme.Default;
+                _backgroundRenderWidthKey = 0;
+            }
+        }
+    }
+
+    private void QueueBackgroundResizeRefresh()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _backgroundResizePending = true;
+        if (_themeToggleInProgress)
+        {
+            return;
+        }
+
+        if (_backgroundResizeTimer is null)
+        {
+            _backgroundResizeTimer = DispatcherQueue.CreateTimer();
+            _backgroundResizeTimer.Interval = TimeSpan.FromMilliseconds(
+                BackgroundResizeDebounceMilliseconds);
+            _backgroundResizeTimer.IsRepeating = false;
+            _backgroundResizeTimer.Tick += BackgroundResizeTimer_Tick;
+        }
+
+        _backgroundResizeTimer.Stop();
+        _backgroundResizeTimer.Start();
+    }
+
+    private void BackgroundResizeTimer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        if (_disposed || _themeToggleInProgress)
+        {
+            return;
+        }
+
+        _backgroundResizePending = false;
+        try
+        {
+            EnsureThemeBackground(force: false);
+        }
+        catch (Exception)
+        {
+            // A resize only adjusts optional image decode density. Keep the
+            // already rendered frame and retry after the next stable size.
+            _backgroundTheme = ElementTheme.Default;
+            _backgroundRenderWidthKey = 0;
+        }
     }
 
     private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -303,12 +434,10 @@ public sealed partial class MainWindow : Window, IDisposable
                 _ => ElementTheme.Default,
             };
         }
-        catch (IOException)
+        catch (Exception)
         {
-            WindowRoot.RequestedTheme = ElementTheme.Default;
-        }
-        catch (UnauthorizedAccessException)
-        {
+            // A local preference is non-critical; use the Windows theme when storage
+            // is unavailable or another portable instance owns the preference file.
             WindowRoot.RequestedTheme = ElementTheme.Default;
         }
     }
@@ -321,11 +450,7 @@ public sealed partial class MainWindow : Window, IDisposable
                 ? UiLanguage.English
                 : UiLanguage.ChineseSimplified);
         }
-        catch (IOException)
-        {
-            UiText.SetLanguage(UiLanguage.ChineseSimplified);
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception)
         {
             UiText.SetLanguage(UiLanguage.ChineseSimplified);
         }
@@ -340,11 +465,7 @@ public sealed partial class MainWindow : Window, IDisposable
         {
             _ = _languagePreferenceStore.Write(UiText.LanguageTag);
         }
-        catch (IOException)
-        {
-            // The language still changes for this session if persistence is unavailable.
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception)
         {
             // The language still changes for this session if persistence is unavailable.
         }
@@ -378,17 +499,28 @@ public sealed partial class MainWindow : Window, IDisposable
 
     private void ThemeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isHighContrast)
+        if (_isHighContrast ||
+            _themeToggleInProgress ||
+            (_pendingBackground is not null && !_themeTransitionPending))
         {
-            _outgoingThemeBackground = SceneBackgroundImage.Source;
-            _themeTransitionPending = _outgoingThemeBackground is not null;
+            return;
         }
 
-        WindowRoot.RequestedTheme = WindowRoot.ActualTheme == ElementTheme.Dark
-            ? ElementTheme.Light
-            : ElementTheme.Dark;
+        _themeTransitionPending = PrepareBackgroundTransitionCover();
+        _themeToggleInProgress = true;
+        ThemeButton.IsEnabled = false;
 
-        PersistThemePreference(WindowRoot.RequestedTheme);
+        try
+        {
+            WindowRoot.RequestedTheme = WindowRoot.ActualTheme == ElementTheme.Dark
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+            PersistThemePreference(WindowRoot.RequestedTheme);
+        }
+        catch (Exception)
+        {
+            CancelThemeTransition(restoreOutgoingBackground: true);
+        }
     }
 
     private void PersistThemePreference(ElementTheme theme)
@@ -398,11 +530,7 @@ public sealed partial class MainWindow : Window, IDisposable
             _ = _themePreferenceStore.Write(
                 theme == ElementTheme.Light ? LightThemeName : DarkThemeName);
         }
-        catch (IOException)
-        {
-            // The theme still changes for this session if local persistence is unavailable.
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception)
         {
             // The theme still changes for this session if local persistence is unavailable.
         }
@@ -411,8 +539,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private void UpdateThemePresentation()
     {
         var isDark = WindowRoot.ActualTheme == ElementTheme.Dark;
-        var imageName = isDark ? "blockferry-ambient.jpg" : "blockferry-ambient-light.jpg";
-        SceneBackgroundImage.Source = new BitmapImage(new Uri($"ms-appx:///Assets/{imageName}"));
+        EnsureThemeBackground(force: false);
         ThemeGlyph.Glyph = isDark ? "\uE706" : "\uE708";
 
         var nextThemeName = isDark ? "浅色" : "深色";
@@ -425,6 +552,134 @@ public sealed partial class MainWindow : Window, IDisposable
         var foreground = isDark ? Colors.White : Colors.Black;
         AppWindow.TitleBar.ButtonForegroundColor = foreground;
         AppWindow.TitleBar.ButtonInactiveForegroundColor = foreground;
+    }
+
+    private void EnsureThemeBackground(bool force)
+    {
+        if (_isHighContrast || _disposed)
+        {
+            return;
+        }
+
+        var theme = WindowRoot.ActualTheme == ElementTheme.Dark
+            ? ElementTheme.Dark
+            : ElementTheme.Light;
+        var renderWidthKey = CalculateBackgroundRenderWidthKey();
+        if (!force && theme == _backgroundTheme && renderWidthKey == _backgroundRenderWidthKey)
+        {
+            return;
+        }
+
+        if (!_themeTransitionPending &&
+            _pendingBackground is null &&
+            SceneBackgroundImage.Source is not null)
+        {
+            _themeTransitionPending = PrepareBackgroundTransitionCover();
+        }
+
+        var imageName = theme == ElementTheme.Dark
+            ? "blockferry-ambient.png"
+            : "blockferry-ambient-light.png";
+        // Keep the explicit decode size unset. Because the BitmapImage is connected
+        // to the live Image before UriSource is assigned, WinUI can right-size it for
+        // the real client area instead of bilinearly shrinking an oversized decode.
+        var image = new BitmapImage();
+        var generation = ++_backgroundLoadGeneration;
+        image.ImageOpened += (_, _) => BackgroundImageOpened(image, generation);
+        image.ImageFailed += (_, _) => BackgroundImageFailed(image, generation);
+
+        _backgroundTheme = theme;
+        _backgroundRenderWidthKey = renderWidthKey;
+        _pendingBackground = image;
+        if (!_themeTransitionPending && SceneBackgroundImage.Source is null)
+        {
+            ThemeButton.IsEnabled = false;
+        }
+
+        SceneBackgroundImage.Source = image;
+        image.UriSource = new Uri($"ms-appx:///Assets/{imageName}");
+    }
+
+    private int CalculateBackgroundRenderWidthKey()
+    {
+        var clientSize = AppWindow.ClientSize;
+        var requiredWidth = Math.Max(
+            clientSize.Width,
+            (int)Math.Ceiling(clientSize.Height * BackgroundAspectRatio));
+        var roundedWidth = (int)Math.Ceiling(
+            requiredWidth / (double)BackgroundReloadQuantum) * BackgroundReloadQuantum;
+        return Math.Clamp(roundedWidth, BackgroundReloadQuantum, BackgroundSourceWidth);
+    }
+
+    private void BackgroundImageOpened(BitmapImage image, long generation)
+    {
+        if (_disposed ||
+            generation != _backgroundLoadGeneration ||
+            !ReferenceEquals(_pendingBackground, image) ||
+            !ReferenceEquals(SceneBackgroundImage.Source, image))
+        {
+            return;
+        }
+
+        _pendingBackground = null;
+        if (_themeTransitionPending)
+        {
+            BeginThemeTransition();
+        }
+        else if (_themeToggleInProgress)
+        {
+            CompleteThemeToggle();
+        }
+        else
+        {
+            ThemeButton.IsEnabled = true;
+        }
+    }
+
+    private void BackgroundImageFailed(BitmapImage image, long generation)
+    {
+        if (_disposed ||
+            generation != _backgroundLoadGeneration ||
+            !ReferenceEquals(_pendingBackground, image))
+        {
+            return;
+        }
+
+        _pendingBackground = null;
+        _backgroundTheme = ElementTheme.Default;
+        _backgroundRenderWidthKey = 0;
+        CancelThemeTransition(restoreOutgoingBackground: true);
+    }
+
+    private bool PrepareBackgroundTransitionCover()
+    {
+        if (_themeTransitionPending &&
+            _outgoingThemeBackground is not null &&
+            PreviousSceneBackgroundImage.Source is not null)
+        {
+            ThemeTransitionCover.Opacity = 1;
+            return true;
+        }
+
+        if (_isHighContrast || SceneBackgroundImage.Source is not ImageSource outgoingBackground)
+        {
+            return false;
+        }
+
+        InvalidateThemeTransitionStoryboard();
+        _outgoingThemeBackground = outgoingBackground;
+        _outgoingBackgroundTheme = _backgroundTheme;
+        _outgoingBackgroundRenderWidthKey = _backgroundRenderWidthKey;
+        PreviousSceneBackgroundImage.Source = outgoingBackground;
+        PreviousSceneVeil.Fill = SceneVeil.Fill;
+        ThemeTransitionCover.Opacity = 1;
+        return true;
+    }
+
+    private void InvalidateBackgroundLoad()
+    {
+        ++_backgroundLoadGeneration;
+        _pendingBackground = null;
     }
 
     private void ApplyAccessibilityPreferences()
@@ -440,16 +695,14 @@ public sealed partial class MainWindow : Window, IDisposable
         // effects. The authored scene image remains part of the app's visual design.
         SceneBackgroundImage.Opacity = highContrast ? 0 : 1;
         TopBlurLayer.Opacity = advancedEffects ? 0.56 : 0;
-        SystemBackdrop = advancedEffects ? new MicaBackdrop() : null;
+        UpdateSystemBackdrop(advancedEffects);
 
         if (highContrast)
         {
-            _themeTransitionPending = false;
-            _outgoingThemeBackground = null;
-            _themeTransitionStoryboard?.Stop();
+            CancelThemeTransition(restoreOutgoingBackground: false);
             PreviousSceneBackgroundImage.Source = null;
-            PreviousSceneBackgroundImage.Opacity = 0;
-            ContentLayer.Opacity = 1;
+            PreviousSceneVeil.Fill = null;
+            ThemeTransitionCover.Opacity = 0;
             StopGlowFollow();
             _glowPositionInitialized = false;
             SetPointerGlowVisibility(false, animate: false);
@@ -461,48 +714,137 @@ public sealed partial class MainWindow : Window, IDisposable
         }
     }
 
+    private void UpdateSystemBackdrop(bool advancedEffects)
+    {
+        if (_systemBackdropUnavailable || advancedEffects == _systemBackdropAttached)
+        {
+            return;
+        }
+
+        try
+        {
+            if (advancedEffects)
+            {
+                _micaBackdrop ??= new MicaBackdrop();
+                SystemBackdrop = _micaBackdrop;
+                _systemBackdropAttached = true;
+            }
+            else
+            {
+                SystemBackdrop = null;
+                _systemBackdropAttached = false;
+            }
+        }
+        catch (Exception)
+        {
+            // Mica is optional and can fail on older Windows builds, RDP sessions,
+            // virtual GPUs, or disabled composition. The authored scene is the fallback.
+            _systemBackdropUnavailable = true;
+            _systemBackdropAttached = false;
+            try
+            {
+                SystemBackdrop = null;
+            }
+            catch (Exception)
+            {
+                // Even detaching an unavailable compositor is best-effort.
+            }
+        }
+    }
+
     private void BeginThemeTransition()
     {
         var outgoingBackground = _outgoingThemeBackground;
         _themeTransitionPending = false;
         _outgoingThemeBackground = null;
+        _outgoingBackgroundTheme = ElementTheme.Default;
+        _outgoingBackgroundRenderWidthKey = 0;
 
         if (_isHighContrast || outgoingBackground is null)
         {
             PreviousSceneBackgroundImage.Source = null;
-            PreviousSceneBackgroundImage.Opacity = 0;
-            ContentLayer.Opacity = 1;
+            PreviousSceneVeil.Fill = null;
+            ThemeTransitionCover.Opacity = 0;
+            CompleteThemeToggle();
             return;
         }
 
-        _themeTransitionStoryboard?.Stop();
-        PreviousSceneBackgroundImage.Source = outgoingBackground;
-        PreviousSceneBackgroundImage.Opacity = 1;
-        ContentLayer.Opacity = _animationsEnabled ? 0.88 : 0.94;
+        var generation = InvalidateThemeTransitionStoryboard();
 
         // Reduced-motion mode keeps a short, stationary dissolve. High contrast
         // bypasses this method entirely.
-        var duration = TimeSpan.FromMilliseconds(_animationsEnabled ? 260 : 110);
+        var duration = TimeSpan.FromMilliseconds(_animationsEnabled ? 320 : 110);
         var storyboard = new Storyboard();
         storyboard.Children.Add(CreateOpacityAnimation(
-            PreviousSceneBackgroundImage,
-            PreviousSceneBackgroundImage.Opacity,
+            ThemeTransitionCover,
+            ThemeTransitionCover.Opacity,
             0,
-            duration));
-        storyboard.Children.Add(CreateOpacityAnimation(
-            ContentLayer,
-            ContentLayer.Opacity,
-            1,
             duration));
         storyboard.Completed += (_, _) =>
         {
+            if (generation != _themeTransitionGeneration ||
+                !ReferenceEquals(_themeTransitionStoryboard, storyboard))
+            {
+                return;
+            }
+
+            _themeTransitionStoryboard = null;
             PreviousSceneBackgroundImage.Source = null;
-            PreviousSceneBackgroundImage.Opacity = 0;
-            ContentLayer.Opacity = 1;
+            PreviousSceneVeil.Fill = null;
+            ThemeTransitionCover.Opacity = 0;
+            CompleteThemeToggle();
         };
 
         _themeTransitionStoryboard = storyboard;
         storyboard.Begin();
+    }
+
+    private long InvalidateThemeTransitionStoryboard()
+    {
+        var generation = ++_themeTransitionGeneration;
+        var storyboard = _themeTransitionStoryboard;
+        _themeTransitionStoryboard = null;
+        storyboard?.Stop();
+        return generation;
+    }
+
+    private void CancelThemeTransition(bool restoreOutgoingBackground)
+    {
+        InvalidateThemeTransitionStoryboard();
+        InvalidateBackgroundLoad();
+        if (restoreOutgoingBackground && _outgoingThemeBackground is not null)
+        {
+            SceneBackgroundImage.Source = _outgoingThemeBackground;
+            _backgroundTheme = _outgoingBackgroundTheme;
+            _backgroundRenderWidthKey = _outgoingBackgroundRenderWidthKey;
+        }
+        else
+        {
+            _backgroundTheme = ElementTheme.Default;
+            _backgroundRenderWidthKey = 0;
+        }
+
+        _themeTransitionPending = false;
+        _outgoingThemeBackground = null;
+        _outgoingBackgroundTheme = ElementTheme.Default;
+        _outgoingBackgroundRenderWidthKey = 0;
+        PreviousSceneBackgroundImage.Source = null;
+        PreviousSceneVeil.Fill = null;
+        ThemeTransitionCover.Opacity = 0;
+        CompleteThemeToggle();
+    }
+
+    private void CompleteThemeToggle()
+    {
+        _themeToggleInProgress = false;
+        if (!_disposed)
+        {
+            ThemeButton.IsEnabled = true;
+            if (_backgroundResizePending)
+            {
+                QueueBackgroundResizeRefresh();
+            }
+        }
     }
 
     private void WindowRoot_PointerEntered(object sender, PointerRoutedEventArgs e)
@@ -579,13 +921,19 @@ public sealed partial class MainWindow : Window, IDisposable
 
         _glowCurrentX = _glowTargetX;
         _glowCurrentY = _glowTargetY;
+        _glowVelocityX = 0;
+        _glowVelocityY = 0;
+        _trailGlowCurrentX = _glowTargetX;
+        _trailGlowCurrentY = _glowTargetY;
+        _trailGlowVelocityX = 0;
+        _trailGlowVelocityY = 0;
         _glowPositionInitialized = true;
         ApplyPointerGlowPosition();
     }
 
     private void StartGlowFollow()
     {
-        if (_isHighContrast || !_pointerGlowModalCoordinator.AllowsGlow || _glowFollowTimerRunning)
+        if (_isHighContrast || !_pointerGlowModalCoordinator.AllowsGlow)
         {
             return;
         }
@@ -596,24 +944,47 @@ public sealed partial class MainWindow : Window, IDisposable
             return;
         }
 
-        _lastGlowFrameTimestamp = Stopwatch.GetTimestamp();
-        _glowFollowTimer.Start();
-        _glowFollowTimerRunning = true;
-    }
+        if (!_animationsEnabled)
+        {
+            _glowCurrentX = _glowTargetX;
+            _glowCurrentY = _glowTargetY;
+            _glowVelocityX = 0;
+            _glowVelocityY = 0;
+            _trailGlowCurrentX = _glowTargetX;
+            _trailGlowCurrentY = _glowTargetY;
+            _trailGlowVelocityX = 0;
+            _trailGlowVelocityY = 0;
+            ApplyPointerGlowPosition();
+            return;
+        }
 
-    private void StopGlowFollow()
-    {
-        if (!_glowFollowTimerRunning)
+        if (_glowRenderingSubscribed)
         {
             return;
         }
 
-        _glowFollowTimer.Stop();
-        _glowFollowTimerRunning = false;
-        _lastGlowFrameTimestamp = 0;
+        _lastGlowFrameTimestamp = Stopwatch.GetTimestamp();
+        CompositionTarget.Rendering += GlowFollowRendering;
+        _glowRenderingSubscribed = true;
     }
 
-    private void GlowFollowTimer_Tick(object? sender, object e)
+    private void StopGlowFollow()
+    {
+        _glowVelocityX = 0;
+        _glowVelocityY = 0;
+        _trailGlowVelocityX = 0;
+        _trailGlowVelocityY = 0;
+        _lastGlowFrameTimestamp = 0;
+        if (!_glowRenderingSubscribed)
+        {
+            return;
+        }
+
+        CompositionTarget.Rendering -= GlowFollowRendering;
+        _glowRenderingSubscribed = false;
+    }
+
+    private void GlowFollowRendering(object? sender, object e)
     {
         if (_isHighContrast || !_pointerGlowModalCoordinator.AllowsGlow)
         {
@@ -622,25 +993,67 @@ public sealed partial class MainWindow : Window, IDisposable
         }
 
         var now = Stopwatch.GetTimestamp();
-        var elapsedSeconds = Math.Clamp(
+        var elapsedSeconds = Math.Min(
             (now - _lastGlowFrameTimestamp) / (double)Stopwatch.Frequency,
-            1.0 / 240,
             0.05);
         _lastGlowFrameTimestamp = now;
+        if (elapsedSeconds <= 0)
+        {
+            return;
+        }
 
-        // Exponential damping gives the diffuse light a little visual mass without
-        // overshoot. Reduced-motion mode settles more quickly.
-        var responsiveness = _animationsEnabled ? 22.0 : 40.0;
-        var blend = 1 - Math.Exp(-responsiveness * elapsedSeconds);
-        _glowCurrentX += (_glowTargetX - _glowCurrentX) * blend;
-        _glowCurrentY += (_glowTargetY - _glowCurrentY) * blend;
+        // Two analytic springs keep both light layers behind the scene veil. The
+        // compact core preserves pointer connection while the softer trail carries
+        // visible inertia. Only composition offsets change, so pointer motion never
+        // invalidates XAML layout.
+        PointerGlowSpring.Advance(
+            ref _glowCurrentX,
+            ref _glowVelocityX,
+            _glowTargetX,
+            elapsedSeconds,
+            GlowCoreAngularFrequency,
+            GlowCoreDampingRatio);
+        PointerGlowSpring.Advance(
+            ref _glowCurrentY,
+            ref _glowVelocityY,
+            _glowTargetY,
+            elapsedSeconds,
+            GlowCoreAngularFrequency,
+            GlowCoreDampingRatio);
+        PointerGlowSpring.Advance(
+            ref _trailGlowCurrentX,
+            ref _trailGlowVelocityX,
+            _glowTargetX,
+            elapsedSeconds,
+            GlowTrailAngularFrequency,
+            GlowTrailDampingRatio);
+        PointerGlowSpring.Advance(
+            ref _trailGlowCurrentY,
+            ref _trailGlowVelocityY,
+            _glowTargetY,
+            elapsedSeconds,
+            GlowTrailAngularFrequency,
+            GlowTrailDampingRatio);
 
-        var remainingX = Math.Abs(_glowTargetX - _glowCurrentX);
-        var remainingY = Math.Abs(_glowTargetY - _glowCurrentY);
-        if (remainingX < 0.2 && remainingY < 0.2)
+        var remainingX = Math.Max(
+            Math.Abs(_glowTargetX - _glowCurrentX),
+            Math.Abs(_glowTargetX - _trailGlowCurrentX));
+        var remainingY = Math.Max(
+            Math.Abs(_glowTargetY - _glowCurrentY),
+            Math.Abs(_glowTargetY - _trailGlowCurrentY));
+        var remainingSpeed = Math.Max(
+            Math.Max(Math.Abs(_glowVelocityX), Math.Abs(_glowVelocityY)),
+            Math.Max(Math.Abs(_trailGlowVelocityX), Math.Abs(_trailGlowVelocityY)));
+        if (remainingX < 0.3 && remainingY < 0.3 && remainingSpeed < 4)
         {
             _glowCurrentX = _glowTargetX;
             _glowCurrentY = _glowTargetY;
+            _glowVelocityX = 0;
+            _glowVelocityY = 0;
+            _trailGlowCurrentX = _glowTargetX;
+            _trailGlowCurrentY = _glowTargetY;
+            _trailGlowVelocityX = 0;
+            _trailGlowVelocityY = 0;
             StopGlowFollow();
         }
 
@@ -654,10 +1067,16 @@ public sealed partial class MainWindow : Window, IDisposable
             return;
         }
 
-        BackgroundGlowTransform.X = _glowCurrentX - (BackgroundPointerGlow.Width / 2);
-        BackgroundGlowTransform.Y = _glowCurrentY - (BackgroundPointerGlow.Height / 2);
-        ForegroundGlowTransform.X = _glowCurrentX - (ForegroundPointerGlow.Width / 2);
-        ForegroundGlowTransform.Y = _glowCurrentY - (ForegroundPointerGlow.Height / 2);
+        _backgroundGlowVisual ??= ElementCompositionPreview.GetElementVisual(BackgroundPointerGlow);
+        _backgroundGlowVisual.Offset = new Vector3(
+            (float)(_glowCurrentX - (BackgroundPointerGlow.Width / 2)),
+            (float)(_glowCurrentY - (BackgroundPointerGlow.Height / 2)),
+            0);
+        _trailGlowVisual ??= ElementCompositionPreview.GetElementVisual(TrailPointerGlow);
+        _trailGlowVisual.Offset = new Vector3(
+            (float)(_trailGlowCurrentX - (TrailPointerGlow.Width / 2)),
+            (float)(_trailGlowCurrentY - (TrailPointerGlow.Height / 2)),
+            0);
     }
 
     private void SetPointerGlowVisibility(bool visible, bool animate)
@@ -668,19 +1087,22 @@ public sealed partial class MainWindow : Window, IDisposable
             animate = false;
         }
 
-        var backgroundOpacity = visible ? BackgroundGlowVisibleOpacity : 0;
-        var foregroundOpacity = visible ? ForegroundGlowVisibleOpacity : 0;
+        var coreOpacity = visible ? GlowCoreVisibleOpacity : 0;
+        var trailOpacity = visible ? GlowTrailVisibleOpacity : 0;
 
         var generation = InvalidatePointerGlowStoryboard();
 
         if (!animate)
         {
-            BackgroundPointerGlow.Opacity = backgroundOpacity;
-            ForegroundPointerGlow.Opacity = foregroundOpacity;
+            BackgroundPointerGlow.Opacity = coreOpacity;
+            TrailPointerGlow.Opacity = trailOpacity;
             return;
         }
 
-        var duration = TimeSpan.FromMilliseconds(_animationsEnabled ? 170 : 90);
+        var coreDuration = TimeSpan.FromMilliseconds(
+            _animationsEnabled ? (visible ? 140 : 120) : 80);
+        var trailDuration = TimeSpan.FromMilliseconds(
+            _animationsEnabled ? (visible ? 210 : 230) : 100);
         var storyboard = new Storyboard
         {
             FillBehavior = FillBehavior.Stop,
@@ -688,13 +1110,13 @@ public sealed partial class MainWindow : Window, IDisposable
         storyboard.Children.Add(CreateOpacityAnimation(
             BackgroundPointerGlow,
             BackgroundPointerGlow.Opacity,
-            backgroundOpacity,
-            duration));
+            coreOpacity,
+            coreDuration));
         storyboard.Children.Add(CreateOpacityAnimation(
-            ForegroundPointerGlow,
-            ForegroundPointerGlow.Opacity,
-            foregroundOpacity,
-            duration));
+            TrailPointerGlow,
+            TrailPointerGlow.Opacity,
+            trailOpacity,
+            trailDuration));
         storyboard.Completed += (_, _) =>
         {
             if (generation != _pointerGlowStoryboardGeneration ||
@@ -704,8 +1126,8 @@ public sealed partial class MainWindow : Window, IDisposable
             }
 
             _pointerGlowStoryboard = null;
-            BackgroundPointerGlow.Opacity = backgroundOpacity;
-            ForegroundPointerGlow.Opacity = foregroundOpacity;
+            BackgroundPointerGlow.Opacity = coreOpacity;
+            TrailPointerGlow.Opacity = trailOpacity;
         };
 
         _pointerGlowStoryboard = storyboard;
@@ -721,12 +1143,12 @@ public sealed partial class MainWindow : Window, IDisposable
             return generation;
         }
 
-        var backgroundOpacity = BackgroundPointerGlow.Opacity;
-        var foregroundOpacity = ForegroundPointerGlow.Opacity;
+        var coreOpacity = BackgroundPointerGlow.Opacity;
+        var trailOpacity = TrailPointerGlow.Opacity;
         _pointerGlowStoryboard = null;
         storyboard.Stop();
-        BackgroundPointerGlow.Opacity = backgroundOpacity;
-        ForegroundPointerGlow.Opacity = foregroundOpacity;
+        BackgroundPointerGlow.Opacity = coreOpacity;
+        TrailPointerGlow.Opacity = trailOpacity;
         return generation;
     }
 
