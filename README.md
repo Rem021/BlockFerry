@@ -1,23 +1,29 @@
 <p align="center">
-  <img src="src/BlockFerry.App.WinUI/Assets/AppIcon-1024.png" width="112" alt="BlockFerry app icon">
+  <img src="src/BlockFerry.App.WinUI/Assets/AppIcon-1024.png" width="80" alt="BlockFerry">
 </p>
 
-<h1 align="center">BlockFerry</h1>
+# BlockFerry
 
-<p align="center"><strong>Carry your Minecraft preferences to a new modpack safely — without copying the whole instance.</strong></p>
+**Move your Minecraft controls, sound settings, and JEI bookmarks to a new modpack.**
 
-<p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a>
-</p>
+For Windows and PCL2. Preview the changes, approve the plan, and keep a restore point for undo.
 
-<p align="center">
-  <a href="https://github.com/Rem021/BlockFerry/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square"></a>
-  <a href="https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml"><img alt="Windows CI" src="https://img.shields.io/github/actions/workflow/status/Rem021/BlockFerry/ci.yml?branch=main&style=flat-square&label=Windows%20CI"></a>
-  <a href="LICENSE"><img alt="MPL-2.0 license" src="https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square"></a>
-</p>
+[简体中文](README.zh-CN.md) · **[Download Windows beta](https://github.com/Rem021/BlockFerry/releases)** · [Supported settings](#what-it-can-migrate) · [Safety and privacy](#safety-and-privacy)
+
+[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
 
 > [!IMPORTANT]
-> `0.1.0-beta.5` is a public beta for Windows 10/11, PCL2, and Minecraft Java 1.21.1. Always review the final migration plan and keep the restore point created by BlockFerry.
+> `0.1.0-beta.5` is a public beta for Windows 10/11, PCL2, and Minecraft Java 1.21.1. Review the final plan and keep the restore point.
+
+## Download and use
+
+1. Download `BlockFerry-*-win-x64-portable.zip` from [Releases](https://github.com/Rem021/BlockFerry/releases).
+2. Extract the ZIP completely; do not run the app from inside the archive.
+3. Start `BlockFerry.App.WinUI.exe`. This beta requests Windows administrator approval once so it can preserve protected file metadata safely.
+4. Select a source and a target instance, then choose the preferences you want to carry over.
+5. Review the generated plan before starting the transaction.
+
+BlockFerry checks the public GitHub Releases API once at startup. It only shows an update link; it never downloads or runs an update automatically. Network errors and rate limits are ignored quietly.
 
 ## Why BlockFerry?
 
@@ -38,16 +44,6 @@ It does **not** copy old mod JARs, scripts, worlds, account tokens, launcher dat
 | Interface | Instant Simplified Chinese/English switching, responsive migration workspace, real task progress, and completion feedback |
 
 Worlds, server lists, login credentials, mod files, KubeJS/scripts, resource-pack files, and launcher account data are intentionally out of scope.
-
-## Download and use
-
-1. Download `BlockFerry-*-win-x64-portable.zip` from [Releases](https://github.com/Rem021/BlockFerry/releases).
-2. Extract the ZIP completely; do not run the app from inside the archive.
-3. Start `BlockFerry.App.WinUI.exe`. This beta requests Windows administrator approval once so it can preserve protected file metadata safely.
-4. Select a source and a target instance, then choose the preferences you want to carry over.
-5. Review the generated plan before starting the transaction.
-
-BlockFerry checks the public GitHub Releases API once at startup. It only shows an update link; it never downloads or runs an update automatically. Network errors and rate limits are ignored quietly.
 
 ## Safety and privacy
 
