@@ -1,17 +1,29 @@
 <p align="center">
-  <img src="src/BlockFerry.App.WinUI/Assets/AppIcon-1024.png" width="112" alt="BlockFerry 图标">
+  <img src="src/BlockFerry.App.WinUI/Assets/AppIcon-1024.png" width="80" alt="BlockFerry">
 </p>
 
-<h1 align="center">BlockFerry · 方块渡口</h1>
+# BlockFerry · 方块渡口
 
-<p align="center">把 Minecraft 个人习惯安全带到新整合包，而不是复制整个实例。</p>
+**把 Minecraft 的按键、音量和 JEI 收藏迁移到新整合包。**
 
-<p align="center">
-  <a href="README.md">English</a> · 简体中文
-</p>
+面向 Windows 与 PCL2。先预览差异，确认后同步；保留还原点，可撤销迁移。
+
+[English](README.md) · **[下载 Windows 测试版](https://github.com/Rem021/BlockFerry/releases)** · [支持范围](#当前能力) · [安全与隐私](#安全与隐私)
+
+[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
 
 > [!IMPORTANT]
-> 当前是 `0.1.0-beta.5` 测试版，面向 Windows 10/11、PCL2 与 Minecraft Java 1.21.1。请先看最终清单并保留应用生成的还原点。
+> 当前为 `0.1.0-beta.5` 测试版，支持范围为 Windows 10/11、PCL2 与 Minecraft Java 1.21.1。请审核最终清单，并保留还原点。
+
+## 下载和使用
+
+1. 在 [Releases](https://github.com/Rem021/BlockFerry/releases) 下载最新的 `BlockFerry-*-win-x64-portable.zip`。
+2. 完整解压 ZIP；不要直接在压缩包内运行。
+3. 双击 `BlockFerry.App.WinUI.exe`。当前测试版会显示一次 Windows 管理员授权提示，用于保留受保护文件的安全元数据。
+4. 选择来源实例和目标实例，勾选要同步的内容。
+5. 先点“检查同步计划”，确认最终清单后再执行。
+
+应用启动后会向 GitHub 的公开 Releases API 发起一次只读检查。有新版本时，标题栏会出现入口；BlockFerry 不会自动下载或执行更新。离线、被限流或响应异常时，这一步会安静跳过。搜索与设置读取使用循环加载动画，真正同步时显示由事务步骤计算的确定进度。
 
 ## 它解决什么
 
@@ -33,16 +45,6 @@
 | 迁移工作区 | 选择、审核、执行/验证分阶段呈现；桌面双栏、窄屏纵向布局，并提供独立事务进度页 |
 
 暂不迁移世界、服务器列表、登录凭据、模组文件、KubeJS/脚本、资源包文件或启动器账号数据。
-
-## 下载和使用
-
-1. 在 [Releases](https://github.com/Rem021/BlockFerry/releases) 下载最新的 `BlockFerry-*-win-x64-portable.zip`。
-2. 完整解压 ZIP；不要直接在压缩包内运行。
-3. 双击 `BlockFerry.App.WinUI.exe`。当前测试版会显示一次 Windows 管理员授权提示，用于保留受保护文件的安全元数据。
-4. 选择来源实例和目标实例，勾选要同步的内容。
-5. 先点“检查同步计划”，确认最终清单后再执行。
-
-应用启动后会向 GitHub 的公开 Releases API 发起一次只读检查。有新版本时，标题栏会出现入口；BlockFerry 不会自动下载或执行更新。离线、被限流或响应异常时，这一步会安静跳过。搜索与设置读取使用循环加载动画，真正同步时显示由事务步骤计算的确定进度。
 
 ## 安全与隐私
 
