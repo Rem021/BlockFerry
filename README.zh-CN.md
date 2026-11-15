@@ -10,7 +10,7 @@
 
 [English](README.md) · **[下载 Windows 测试版](https://github.com/Rem021/BlockFerry/releases)** · [支持范围](#当前能力) · [安全与隐私](#安全与隐私)
 
-[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
 
 > [!IMPORTANT]
 > 当前为 `0.1.0-beta.5` 测试版，支持范围为 Windows 10/11、PCL2 与 Minecraft Java 1.21.1。请审核最终清单，并保留还原点。

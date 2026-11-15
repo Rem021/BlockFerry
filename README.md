@@ -10,7 +10,7 @@ For Windows and PCL2. Preview the changes, approve the plan, and keep a restore 
 
 [简体中文](README.zh-CN.md) · **[Download Windows beta](https://github.com/Rem021/BlockFerry/releases)** · [Supported settings](#what-it-can-migrate) · [Safety and privacy](#safety-and-privacy)
 
-[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Rem021/BlockFerry?include_prereleases&style=flat-square)](https://github.com/Rem021/BlockFerry/releases) [![CI](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml/badge.svg)](https://github.com/Rem021/BlockFerry/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
 
 > [!IMPORTANT]
 > `0.1.0-beta.5` is a public beta for Windows 10/11, PCL2, and Minecraft Java 1.21.1. Review the final plan and keep the restore point.
